@@ -1,7 +1,5 @@
 import {
 	signInWithPopup,
-	signInWithRedirect,
-	getRedirectResult,
 	signInAnonymously,
 	GoogleAuthProvider,
 	signOut as firebaseSignOut,
@@ -19,17 +17,8 @@ import { currentUser, authLoading, userProfile, type UserProfile } from './store
 
 const googleProvider = new GoogleAuthProvider();
 
-function isMobile(): boolean {
-	return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-}
-
 export function initAuth(): void {
 	const auth = getFirebaseAuth();
-
-	// Handle redirect result on return from Google sign-in (mobile flow)
-	getRedirectResult(auth).catch((err) => {
-		console.error('Redirect sign-in error:', err);
-	});
 
 	onAuthStateChanged(auth, async (user) => {
 		currentUser.set(user);
@@ -44,11 +33,7 @@ export function initAuth(): void {
 
 export async function signInWithGoogle(): Promise<void> {
 	const auth = getFirebaseAuth();
-	if (isMobile()) {
-		await signInWithRedirect(auth, googleProvider);
-	} else {
-		await signInWithPopup(auth, googleProvider);
-	}
+	await signInWithPopup(auth, googleProvider);
 }
 
 export async function signInAnon(): Promise<void> {
