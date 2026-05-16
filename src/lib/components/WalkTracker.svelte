@@ -18,6 +18,20 @@
 	let notes = $state('');
 	let saving = $state(false);
 
+	// Action to teleport modal to body to escape CSS transform containing blocks
+	function portal(node: HTMLElement) {
+		document.body.appendChild(node);
+		return {
+			destroy() {
+				if (node.parentNode) node.parentNode.removeChild(node);
+			}
+		};
+	}
+
+	let uniqueDogNames = $derived(
+		Array.from(new Set($encounters.map(e => e.dogName))).sort()
+	);
+
 	onMount(async () => {
 		// Start timer if walk is active
 		if ($walk.isWalking && $walk.startTime) {
@@ -141,73 +155,47 @@
 	});
 </script>
 
-<svelte:head>
-	<title>HelloDog — Walk</title>
-</svelte:head>
-
-<div class="pb-safe min-h-screen">
-	<div class="max-w-lg mx-auto">
-		<!-- Map -->
-		<div class="relative">
-			<div bind:this={mapEl} class="w-full h-64 bg-base-200 map-container"></div>
-			<!-- Walk status overlay -->
-			{#if $walk.isWalking}
-				<div class="absolute top-3 left-3 bg-base-100/90 backdrop-blur-md rounded-xl px-4 py-2 flex items-center gap-2">
-					<div class="w-2.5 h-2.5 rounded-full bg-success animate-pulse"></div>
-					<span class="font-mono font-bold text-lg">{timer}</span>
-				</div>
-			{/if}
-		</div>
-
-		<div class="p-5 space-y-4">
-			<!-- Walk Controls -->
-			<div class="flex gap-3">
-				{#if !$walk.isWalking}
-					<button onclick={handleStartWalk} class="btn btn-primary flex-1 rounded-full gap-2 shadow-lg shadow-primary/20" id="btn-walk-start">
-						🐕 Start Walk
-					</button>
-				{:else}
-					<button onclick={handleStopWalk} class="btn btn-error flex-1 rounded-full gap-2" id="btn-walk-stop">
-						⏹ Stop Walk
-					</button>
-				{/if}
-				<button onclick={() => showEncounterModal.set(true)} class="btn btn-secondary rounded-full gap-2 shadow-lg shadow-secondary/20" id="btn-log-encounter">
-					✍️ Log Meet
-				</button>
+<div class="space-y-4">
+	<!-- Map -->
+	<div class="relative">
+		<div bind:this={mapEl} class="w-full h-64 bg-base-200 map-container"></div>
+		<!-- Walk status overlay -->
+		{#if $walk.isWalking}
+			<div class="absolute top-3 left-3 bg-base-100/90 backdrop-blur-md rounded-xl px-4 py-2 flex items-center gap-2">
+				<div class="w-2.5 h-2.5 rounded-full bg-success animate-pulse"></div>
+				<span class="font-mono font-bold text-lg">{timer}</span>
 			</div>
-
-			<!-- Walk path stats -->
-			{#if $walk.isWalking}
-				<div class="glass-card p-4 grid grid-cols-2 gap-4">
-					<div><div class="text-xs text-base-content/40">Duration</div><div class="font-mono font-bold text-lg">{timer}</div></div>
-					<div><div class="text-xs text-base-content/40">Encounters</div><div class="font-bold text-lg">{$walk.encountersDuringWalk.length}</div></div>
-				</div>
-			{/if}
-
-			<!-- Recent encounters during this session -->
-			{#if $encounters.length > 0}
-				<div>
-					<h3 class="text-sm font-semibold text-base-content/50 mb-2">Recent Logs</h3>
-					<div class="space-y-2">
-						{#each $encounters.slice(0, 3) as enc}
-							<div class="glass-card p-3 flex items-center gap-3">
-								<div class="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-sm">🐕</div>
-								<div class="flex-1 min-w-0">
-									<div class="font-medium text-sm truncate">{enc.dogName}</div>
-								</div>
-								<div class="text-xs">{'🐾'.repeat(enc.friendliness)}</div>
-							</div>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</div>
+		{/if}
 	</div>
+
+	<!-- Walk Controls -->
+	<div class="flex gap-3">
+		{#if !$walk.isWalking}
+			<button onclick={handleStartWalk} class="btn btn-primary flex-1 rounded-full gap-2 shadow-lg shadow-primary/20" id="btn-walk-start">
+				🐕 Start Walk
+			</button>
+		{:else}
+			<button onclick={handleStopWalk} class="btn btn-error flex-1 rounded-full gap-2" id="btn-walk-stop">
+				⏹ Stop Walk
+			</button>
+		{/if}
+		<button onclick={() => showEncounterModal.set(true)} class="btn btn-secondary rounded-full gap-2 shadow-lg shadow-secondary/20" id="btn-log-encounter">
+			✍️ Log Meet
+		</button>
+	</div>
+
+	<!-- Walk path stats -->
+	{#if $walk.isWalking}
+		<div class="glass-card p-4 grid grid-cols-2 gap-4">
+			<div><div class="text-xs text-base-content/40">Duration</div><div class="font-mono font-bold text-lg">{timer}</div></div>
+			<div><div class="text-xs text-base-content/40">Encounters</div><div class="font-bold text-lg">{$walk.encountersDuringWalk.length}</div></div>
+		</div>
+	{/if}
 </div>
 
 <!-- Encounter Modal -->
 {#if $showEncounterModal}
-	<div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-4" onclick={() => showEncounterModal.set(false)}>
+	<div use:portal class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-4" onclick={() => showEncounterModal.set(false)}>
 		<div class="bg-base-200 rounded-2xl w-full max-w-md p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center justify-between">
 				<h2 class="text-xl font-bold">Log Encounter 🐕</h2>
@@ -216,7 +204,12 @@
 
 			<div class="form-control">
 				<label class="label" for="enc-dog-name"><span class="label-text font-medium">Dog's name</span></label>
-				<input type="text" id="enc-dog-name" bind:value={dogName} placeholder="e.g. Max" class="input input-bordered w-full bg-base-300/50 focus:border-primary" required />
+				<input type="text" id="enc-dog-name" bind:value={dogName} list="dog-names-list" placeholder="e.g. Max" class="input input-bordered w-full bg-base-300/50 focus:border-primary" required autocomplete="off" />
+				<datalist id="dog-names-list">
+					{#each uniqueDogNames as name}
+						<option value={name} />
+					{/each}
+				</datalist>
 			</div>
 
 			<div class="form-control">

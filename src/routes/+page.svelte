@@ -2,6 +2,9 @@
 	import { currentUser, userProfile, encounters, walk } from '$lib/stores';
 	import { signInWithGoogle } from '$lib/auth';
 	import { loadEncounters } from '$lib/encounters';
+	import WalkTracker from '$lib/components/WalkTracker.svelte';
+	import EditEncounterModal from '$lib/components/EditEncounterModal.svelte';
+	import type { Encounter } from '$lib/stores';
 	import { onMount } from 'svelte';
 
 	let greeting = $state('');
@@ -13,6 +16,8 @@
 			: '—'
 	);
 	let uniqueDogs = $derived(new Set($encounters.map((e) => e.dogName.toLowerCase())).size);
+
+	let editingEncounter: Encounter | null = $state(null);
 
 	onMount(() => {
 		const h = new Date().getHours();
@@ -113,16 +118,8 @@
 				<div class="glass-card p-4 text-center"><div class="text-2xl font-bold text-accent">{avgFriendliness}</div><div class="text-xs text-base-content/50 mt-1">Avg 🐾</div></div>
 			</div>
 
-			<div class="grid grid-cols-2 gap-3 animate-fade-in stagger-2">
-				<a href="/walk" class="glass-card p-5 flex flex-col items-center gap-2 hover:bg-primary/10 transition-all duration-200 group" id="btn-start-walk">
-					<span class="text-3xl group-hover:scale-110 transition-transform">{$walk.isWalking ? '🏃' : '🚶'}</span>
-					<span class="text-sm font-medium">{$walk.isWalking ? 'Continue Walk' : 'Start Walk'}</span>
-					{#if $walk.isWalking}<span class="badge badge-success badge-sm">Active</span>{/if}
-				</a>
-				<a href="/walk" class="glass-card p-5 flex flex-col items-center gap-2 hover:bg-secondary/10 transition-all duration-200 group" id="btn-quick-log">
-					<span class="text-3xl group-hover:scale-110 transition-transform">✍️</span>
-					<span class="text-sm font-medium">Log Encounter</span>
-				</a>
+			<div class="animate-fade-in stagger-2">
+				<WalkTracker />
 			</div>
 
 			{#if recentEncounters.length > 0}
@@ -133,14 +130,14 @@
 					</div>
 					<div class="space-y-2">
 						{#each recentEncounters as enc, i}
-							<div class="glass-card p-4 flex items-center gap-3 hover:bg-base-content/5 transition-colors" style="animation-delay: {i * 0.1}s">
+							<button class="w-full text-left glass-card p-4 flex items-center gap-3 hover:bg-base-content/5 transition-colors" style="animation-delay: {i * 0.1}s" onclick={() => editingEncounter = enc}>
 								<div class="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-lg shrink-0">🐕</div>
 								<div class="flex-1 min-w-0">
 									<div class="font-medium truncate">{enc.dogName}</div>
 									<div class="text-xs text-base-content/40">{timeAgo(enc.timestamp)}</div>
 								</div>
 								<div class="text-sm shrink-0">{'🐾'.repeat(enc.friendliness)}</div>
-							</div>
+							</button>
 						{/each}
 					</div>
 				</div>
@@ -149,7 +146,6 @@
 					<div class="text-5xl mb-3 animate-float">🐾</div>
 					<h3 class="font-semibold mb-1">No encounters yet</h3>
 					<p class="text-base-content/50 text-sm mb-4">Start a walk and log your first dog encounter!</p>
-					<a href="/walk" class="btn btn-primary btn-sm rounded-full">Start Walking 🐕</a>
 				</div>
 			{/if}
 
@@ -163,4 +159,11 @@
 			</div>
 		</div>
 	</div>
+
+	{#if editingEncounter}
+		<EditEncounterModal
+			encounter={editingEncounter}
+			onClose={() => editingEncounter = null}
+		/>
+	{/if}
 {/if}

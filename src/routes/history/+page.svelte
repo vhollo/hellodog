@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { encounters, currentUser } from '$lib/stores';
 	import { loadEncounters } from '$lib/encounters';
+	import EditEncounterModal from '$lib/components/EditEncounterModal.svelte';
+	import type { Encounter } from '$lib/stores';
 	import { onMount } from 'svelte';
 
 	let filter = $state('');
+	let editingEncounter: Encounter | null = $state(null);
 	let view = $state<'list' | 'map'>('list');
 	let mapEl: HTMLDivElement | undefined = $state();
 	let map: any = null;
@@ -92,7 +95,7 @@
 						<h3 class="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-2">{date}</h3>
 						<div class="space-y-2">
 							{#each encs as enc}
-								<div class="glass-card p-4 flex items-center gap-3 hover:bg-base-content/5 transition-colors">
+								<button class="w-full text-left glass-card p-4 flex items-center gap-3 hover:bg-base-content/5 transition-colors" onclick={() => editingEncounter = enc}>
 									<div class="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-lg shrink-0">🐕</div>
 									<div class="flex-1 min-w-0">
 										<div class="font-medium truncate">{enc.dogName}</div>
@@ -100,7 +103,7 @@
 										{#if enc.notes}<div class="text-xs text-base-content/30 mt-0.5 truncate">{enc.notes}</div>{/if}
 									</div>
 									<div class="text-sm shrink-0">{'🐾'.repeat(enc.friendliness)}</div>
-								</div>
+								</button>
 							{/each}
 						</div>
 					</div>
@@ -112,4 +115,11 @@
 			{filtered.length} encounter{filtered.length !== 1 ? 's' : ''} total
 		</div>
 	</div>
+
+	{#if editingEncounter}
+		<EditEncounterModal
+			encounter={editingEncounter}
+			onClose={() => editingEncounter = null}
+		/>
+	{/if}
 </div>

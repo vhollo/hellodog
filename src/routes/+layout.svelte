@@ -13,7 +13,6 @@
 
 	const tabs = [
 		{ id: 'home' as const, label: 'Home', icon: '🏠', href: '/' },
-		{ id: 'walk' as const, label: 'Walk', icon: '🐕', href: '/walk' },
 		{ id: 'history' as const, label: 'History', icon: '📋', href: '/history' },
 		{ id: 'predictions' as const, label: 'Predict', icon: '🔮', href: '/predictions' },
 		{ id: 'settings' as const, label: 'Settings', icon: '⚙️', href: '/settings' }
@@ -23,7 +22,6 @@
 	$effect(() => {
 		const path = $page.url.pathname;
 		if (path === '/') activeTab.set('home');
-		else if (path.startsWith('/walk')) activeTab.set('walk');
 		else if (path.startsWith('/history')) activeTab.set('history');
 		else if (path.startsWith('/predictions')) activeTab.set('predictions');
 		else if (path.startsWith('/settings')) activeTab.set('settings');

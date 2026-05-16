@@ -7,7 +7,9 @@ import {
 	where,
 	serverTimestamp,
 	Timestamp,
-	limit
+	limit,
+	updateDoc,
+	doc
 } from 'firebase/firestore';
 import { getFirebaseDb } from './firebase';
 import { encounters, type Encounter, predictions, type Prediction, userProfile } from './stores';
@@ -20,6 +22,17 @@ import { get } from 'svelte/store';
 export async function addEncounter(uid: string, encounter: Omit<Encounter, 'id'>): Promise<string> {
 	const db = getFirebaseDb();
 	
+	let resolvedMetUserId = encounter.metUserId;
+	if (!resolvedMetUserId && encounter.dogName) {
+		// Try to match the entered dog name to a registered user
+		const usersRef = collection(db, 'users');
+		const qUser = query(usersRef, where('dogName', '==', encounter.dogName.trim()), limit(1));
+		const snap = await getDocs(qUser);
+		if (!snap.empty) {
+			resolvedMetUserId = snap.docs[0].id;
+		}
+	}
+	
 	// Write to user's encounters subcollection
 	const userEncRef = collection(db, 'users', uid, 'encounters');
 	const docRef = await addDoc(userEncRef, {
@@ -28,7 +41,7 @@ export async function addEncounter(uid: string, encounter: Omit<Encounter, 'id'>
 		notes: encounter.notes || '',
 		location: encounter.location,
 		timestamp: Timestamp.fromDate(encounter.timestamp),
-		metUserId: encounter.metUserId || null
+		metUserId: resolvedMetUserId || null
 	});
 
 	// Also write to global encounters collection (for paid-tier cross-referencing)
@@ -39,11 +52,35 @@ export async function addEncounter(uid: string, encounter: Omit<Encounter, 'id'>
 		notes: encounter.notes || '',
 		location: encounter.location,
 		timestamp: Timestamp.fromDate(encounter.timestamp),
-		metUserId: encounter.metUserId || null,
+		metUserId: resolvedMetUserId || null,
 		reportedByUid: uid
 	});
 
 	return docRef.id;
+}
+
+export async function updateEncounter(uid: string, encounterId: string, updates: Partial<Encounter>): Promise<void> {
+	const db = getFirebaseDb();
+	const docRef = doc(db, 'users', uid, 'encounters', encounterId);
+	
+	const dataToUpdate: any = {};
+	if (updates.dogName !== undefined) {
+		dataToUpdate.dogName = updates.dogName;
+		
+		// Try to match the edited dog name to a registered user
+		const usersRef = collection(db, 'users');
+		const qUser = query(usersRef, where('dogName', '==', updates.dogName.trim()), limit(1));
+		const snap = await getDocs(qUser);
+		if (!snap.empty) {
+			dataToUpdate.metUserId = snap.docs[0].id;
+		} else {
+			dataToUpdate.metUserId = null;
+		}
+	}
+	if (updates.friendliness !== undefined) dataToUpdate.friendliness = updates.friendliness;
+	if (updates.notes !== undefined) dataToUpdate.notes = updates.notes;
+	
+	await updateDoc(docRef, dataToUpdate);
 }
 
 export async function loadEncounters(uid: string): Promise<void> {
