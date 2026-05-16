@@ -43,14 +43,16 @@
 
 		<!-- Bottom Navigation (only when logged in & profile set up) -->
 		{#if $currentUser && $userProfile}
-			<nav class="btm-nav btm-nav-lg bg-base-200/90 backdrop-blur-xl border-t border-base-content/5" id="bottom-nav">
+			<nav class="fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center pb-[env(safe-area-inset-bottom)] bg-base-200/90 backdrop-blur-xl border-t border-base-content/5 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.5)]" id="bottom-nav">
 				{#each tabs as tab}
 					<a
 						href={tab.href}
-						class="transition-all duration-200 {$activeTab === tab.id ? 'active text-primary' : 'text-base-content/40 hover:text-base-content/70'}"
+						class="flex flex-col items-center justify-center flex-1 h-16 transition-all duration-300 {$activeTab === tab.id ? 'text-primary' : 'text-base-content/40 hover:text-base-content/80'}"
 					>
-						<span class="text-xl {$activeTab === tab.id ? 'scale-110' : ''} transition-transform duration-200">{tab.icon}</span>
-						<span class="btm-nav-label text-xs font-medium">{tab.label}</span>
+						<span class="text-2xl {$activeTab === tab.id ? 'scale-110 -translate-y-0.5' : ''} transition-all duration-300">{tab.icon}</span>
+						<span class="text-[10px] font-bold uppercase tracking-wider {$activeTab === tab.id ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'} transition-all duration-300">
+							{tab.label}
+						</span>
 					</a>
 				{/each}
 			</nav>

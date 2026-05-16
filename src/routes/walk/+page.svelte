@@ -69,6 +69,17 @@
 		}
 	});
 
+	// Prevent background scrolling when modal is open
+	$effect(() => {
+		if (typeof document !== 'undefined') {
+			if ($showEncounterModal) {
+				document.body.classList.add('overflow-hidden');
+			} else {
+				document.body.classList.remove('overflow-hidden');
+			}
+		}
+	});
+
 	function handleStartWalk() {
 		startWalk();
 		timerInterval = setInterval(() => {
@@ -124,6 +135,9 @@
 	onDestroy(() => {
 		if (timerInterval) clearInterval(timerInterval);
 		if (map) map.remove();
+		if (typeof document !== 'undefined') {
+			document.body.classList.remove('overflow-hidden');
+		}
 	});
 </script>
 
@@ -193,8 +207,8 @@
 
 <!-- Encounter Modal -->
 {#if $showEncounterModal}
-	<div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onclick={() => showEncounterModal.set(false)}>
-		<div class="bg-base-200 rounded-2xl w-full max-w-md p-6 space-y-5 animate-slide-up" onclick={(e) => e.stopPropagation()}>
+	<div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-4" onclick={() => showEncounterModal.set(false)}>
+		<div class="bg-base-200 rounded-2xl w-full max-w-md p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center justify-between">
 				<h2 class="text-xl font-bold">Log Encounter 🐕</h2>
 				<button onclick={() => showEncounterModal.set(false)} class="btn btn-ghost btn-sm btn-circle">✕</button>
