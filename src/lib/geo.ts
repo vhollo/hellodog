@@ -11,7 +11,7 @@ export function getCurrentPosition(): Promise<GeolocationPosition> {
 		}
 		navigator.geolocation.getCurrentPosition(resolve, reject, {
 			enableHighAccuracy: true,
-			timeout: 10000,
+			timeout: 30000,
 			maximumAge: 5000
 		});
 	});
@@ -32,11 +32,14 @@ export function startWatchingPosition(): void {
 			}));
 		},
 		(error) => {
-			console.warn('Geo watch error:', error.message);
+			console.error('Geo watch error:', error.code, error.message);
+			if (error.code === 1) {
+				alert("Location access denied. Please enable Location Services for Safari in iOS Settings.");
+			}
 		},
 		{
 			enableHighAccuracy: true,
-			timeout: 15000,
+			timeout: 30000,
 			maximumAge: 5000
 		}
 	);
