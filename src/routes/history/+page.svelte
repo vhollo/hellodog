@@ -33,8 +33,9 @@
 	});
 
 	async function initMap() {
-		if (!mapEl || map) return;
+		if (!mapEl || map || view !== 'map') return;
 		const L = await import('leaflet');
+		if (!mapEl || map || view !== 'map') return;
 		map = L.map(mapEl).setView([47.5, 19.04], 12);
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 			attribution: '© OpenStreetMap', maxZoom: 19
@@ -59,7 +60,14 @@
 
 	$effect(() => {
 		if (view === 'map') {
-			setTimeout(initMap, 100);
+			const timer = setTimeout(initMap, 100);
+			return () => {
+				clearTimeout(timer);
+				if (map) {
+					map.remove();
+					map = null;
+				}
+			};
 		}
 	});
 
