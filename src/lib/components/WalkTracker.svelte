@@ -2,7 +2,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { walk, currentUser, showEncounterModal, encounters } from '$lib/stores';
 	import { startWalk, stopWalk, formatDuration, getCurrentPosition } from '$lib/geo';
-	import { addEncounter, loadEncounters } from '$lib/encounters';
+	import { addEncounter, loadEncounters, generatePredictions } from '$lib/encounters';
+	import { getAttitudeInfo } from '$lib/attitude';
 
 	let timer = $state('00:00');
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -11,6 +12,7 @@
 	let L: any = null;
 	let marker: any = null;
 	let pathLine: any = null;
+	let heatmapLayer: any = null;
 
 	// Encounter form state
 	let dogName = $state('');
@@ -83,6 +85,34 @@
 		}
 	});
 
+	// Heatmap for probable friendly meetings
+	$effect(() => {
+		if ($walk.isWalking && map && L && $encounters.length > 0) {
+			if (!heatmapLayer) {
+				const preds = generatePredictions($encounters);
+				// Filter for friendly meetings
+				const friendlyPreds = preds.filter(p => p.avgFriendliness >= 3);
+				
+				const circles = friendlyPreds.map(p => {
+					const radius = 60 + (p.likelihood / 2); // 60-110m radius based on likelihood
+					const att = getAttitudeInfo(p.avgFriendliness);
+					return L.circle([p.bestLocation.lat, p.bestLocation.lng], {
+						color: '#10b981', // Tailwind success/emerald
+						fillColor: '#10b981',
+						fillOpacity: 0.2 + (p.likelihood / 250), // Opacity scales with likelihood
+						weight: 2,
+						opacity: 0.6
+					}).bindPopup(`<b>${p.dogName}</b><br>Likely to be here!<br>Attitude: ${att.emoji} ${att.text}`);
+				});
+				
+				heatmapLayer = L.layerGroup(circles).addTo(map);
+			}
+		} else if (!$walk.isWalking && heatmapLayer && map) {
+			map.removeLayer(heatmapLayer);
+			heatmapLayer = null;
+		}
+	});
+
 	// Prevent background scrolling when modal is open
 	$effect(() => {
 		if (typeof document !== 'undefined') {
@@ -127,13 +157,14 @@
 
 			// Add encounter marker on map
 			if (map && L) {
+				const att = getAttitudeInfo(friendliness);
 				const encIcon = L.divIcon({
-					html: `<div style="font-size:20px">🐕</div>`,
+					html: `<div style="font-size:20px">${att.emoji}</div>`,
 					className: '', iconSize: [20, 20], iconAnchor: [10, 10]
 				});
 				L.marker([loc.lat, loc.lng], { icon: encIcon })
 					.addTo(map)
-					.bindPopup(`<b>${dogName}</b><br>${'🐾'.repeat(friendliness)}`);
+					.bindPopup(`<b>${dogName}</b><br>${att.emoji} ${att.text}`);
 			}
 
 			// Reset form
@@ -213,14 +244,19 @@
 			</div>
 
 			<div class="form-control">
-				<label class="label"><span class="label-text font-medium">Friendliness</span></label>
-				<div class="flex items-center gap-1">
-					{#each [1, 2, 3, 4, 5] as paw}
-						<button onclick={() => friendliness = paw} class="btn btn-ghost btn-sm p-1 text-2xl transition-transform hover:scale-125 {friendliness >= paw ? 'paw-filled' : 'paw-empty'}">
-							🐾
+				<label class="label"><span class="label-text font-medium">Attitude</span></label>
+				<div class="flex items-center justify-between gap-1 w-full">
+					{#each [1, 2, 3, 4, 5] as val}
+						{@const info = getAttitudeInfo(val)}
+						<button
+							type="button"
+							onclick={() => friendliness = val}
+							class="flex flex-col flex-1 items-center justify-center p-2 rounded-xl border-2 transition-all hover:scale-105 {friendliness === val ? 'border-primary bg-primary/10' : 'border-transparent bg-base-300/50 grayscale opacity-50'}"
+						>
+							<span class="text-2xl">{info.emoji}</span>
+							<span class="text-[10px] text-center mt-1 leading-tight">{info.text}</span>
 						</button>
 					{/each}
-					<span class="ml-2 text-sm text-base-content/50">{friendliness}/5</span>
 				</div>
 			</div>
 

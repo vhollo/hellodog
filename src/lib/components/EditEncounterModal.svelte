@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { updateEncounter, loadEncounters } from '$lib/encounters';
 	import { currentUser, type Encounter } from '$lib/stores';
+	import { getAttitudeInfo } from '$lib/attitude';
 
 	let { encounter, onClose } = $props<{ encounter: Encounter; onClose: () => void }>();
 
@@ -48,14 +49,19 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label"><span class="label-text font-medium">Friendliness</span></label>
-			<div class="flex items-center gap-1">
-				{#each [1, 2, 3, 4, 5] as paw}
-					<button onclick={() => friendliness = paw} class="btn btn-ghost btn-sm p-1 text-2xl transition-transform hover:scale-125 {friendliness >= paw ? 'paw-filled' : 'paw-empty'}">
-						🐾
+			<label class="label"><span class="label-text font-medium">Attitude</span></label>
+			<div class="flex items-center justify-between gap-1 w-full">
+				{#each [1, 2, 3, 4, 5] as val}
+					{@const info = getAttitudeInfo(val)}
+					<button
+						type="button"
+						onclick={() => friendliness = val}
+						class="flex flex-col flex-1 items-center justify-center p-2 rounded-xl border-2 transition-all hover:scale-105 {friendliness === val ? 'border-primary bg-primary/10' : 'border-transparent bg-base-300/50 grayscale opacity-50'}"
+					>
+						<span class="text-2xl">{info.emoji}</span>
+						<span class="text-[10px] text-center mt-1 leading-tight">{info.text}</span>
 					</button>
 				{/each}
-				<span class="ml-2 text-sm text-base-content/50">{friendliness}/5</span>
 			</div>
 		</div>
 

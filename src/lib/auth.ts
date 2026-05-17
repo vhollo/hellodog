@@ -74,3 +74,10 @@ export async function saveUserProfile(uid: string, profile: Omit<UserProfile, 'c
 	}, { merge: true });
 	await loadUserProfile(uid);
 }
+
+export async function updateUserProfile(uid: string, profile: Partial<Omit<UserProfile, 'createdAt' | 'isPaid'>>): Promise<void> {
+	const db = getFirebaseDb();
+	const docRef = doc(db, 'users', uid);
+	await setDoc(docRef, profile, { merge: true });
+	await loadUserProfile(uid);
+}

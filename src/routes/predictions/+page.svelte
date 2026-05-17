@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { encounters, predictions, currentUser, userProfile } from '$lib/stores';
 	import { generatePredictions, loadGlobalEncountersForUser, loadEncounters } from '$lib/encounters';
+	import { getAttitudeInfo } from '$lib/attitude';
 	import { onMount } from 'svelte';
 
 	let loading = $state(false);
@@ -83,7 +84,7 @@
 								<div class="font-semibold">{pred.dogName}</div>
 								<div class="text-xs text-base-content/40">{pred.totalMeets} meet{pred.totalMeets !== 1 ? 's' : ''} logged</div>
 							</div>
-							<div class="text-sm">{'🐾'.repeat(Math.round(pred.avgFriendliness))}</div>
+							<div class="text-xl" title={getAttitudeInfo(pred.avgFriendliness).text}>{getAttitudeInfo(pred.avgFriendliness).emoji}</div>
 						</div>
 
 						<div class="grid grid-cols-2 gap-2 text-xs">
@@ -92,8 +93,8 @@
 								<div class="font-medium mt-0.5">🕐 {pred.bestTime}</div>
 							</div>
 							<div class="bg-base-300/30 rounded-lg p-2">
-								<div class="text-base-content/40">Friendliness</div>
-								<div class="font-medium mt-0.5">🐾 {pred.avgFriendliness.toFixed(1)}/5</div>
+								<div class="text-base-content/40">Attitude</div>
+								<div class="font-medium mt-0.5">{getAttitudeInfo(pred.avgFriendliness).emoji} {getAttitudeInfo(pred.avgFriendliness).text}</div>
 							</div>
 						</div>
 

@@ -1,7 +1,37 @@
 <script lang="ts">
 	import { currentUser, userProfile } from '$lib/stores';
-	import { signOut } from '$lib/auth';
+	import { signOut, updateUserProfile } from '$lib/auth';
 	import { goto } from '$app/navigation';
+
+	let isEditingProfile = $state(false);
+	let editDisplayName = $state('');
+	let editDogName = $state('');
+	let editDogBreed = $state('');
+	let isSaving = $state(false);
+
+	function startEdit() {
+		if ($userProfile) {
+			editDisplayName = $userProfile.displayName;
+			editDogName = $userProfile.dogName;
+			editDogBreed = $userProfile.dogBreed || '';
+			isEditingProfile = true;
+		}
+	}
+
+	async function saveProfile() {
+		if (!$currentUser || !$userProfile) return;
+		isSaving = true;
+		try {
+			await updateUserProfile($currentUser.uid, {
+				displayName: editDisplayName,
+				dogName: editDogName,
+				dogBreed: editDogBreed
+			});
+			isEditingProfile = false;
+		} finally {
+			isSaving = false;
+		}
+	}
 
 	async function handleSignOut() {
 		await signOut();
@@ -17,31 +47,56 @@
 
 		<!-- Profile Card -->
 		{#if $userProfile}
-			<div class="glass-card p-5 animate-fade-in stagger-1">
-				<div class="flex items-center gap-4 mb-4">
-					<div class="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center text-2xl">
-						{$currentUser?.photoURL
-							? ''
-							: '🧑'}
+			<div class="glass-card p-5 animate-fade-in stagger-1 relative">
+				{#if !isEditingProfile}
+					<button class="absolute top-4 right-4 text-sm text-primary hover:underline font-medium" onclick={startEdit}>Edit</button>
+					<div class="flex items-center gap-4 mb-4 pr-10">
+						<div class="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center text-2xl">
+							{$currentUser?.photoURL
+								? ''
+								: '🧑'}
+						</div>
+						{#if $currentUser?.photoURL}
+							<img src={$currentUser.photoURL} alt="Profile" class="w-14 h-14 rounded-full absolute" />
+						{/if}
+						<div>
+							<div class="font-semibold text-lg">{$userProfile.displayName}</div>
+							<div class="text-sm text-base-content/50">{$currentUser?.email || 'Anonymous'}</div>
+						</div>
 					</div>
-					{#if $currentUser?.photoURL}
-						<img src={$currentUser.photoURL} alt="Profile" class="w-14 h-14 rounded-full absolute" />
-					{/if}
-					<div>
-						<div class="font-semibold text-lg">{$userProfile.displayName}</div>
-						<div class="text-sm text-base-content/50">{$currentUser?.email || 'Anonymous'}</div>
+					<div class="grid grid-cols-2 gap-3 text-sm">
+						<div class="bg-base-300/30 rounded-lg p-3">
+							<div class="text-xs text-base-content/40">Dog</div>
+							<div class="font-medium">🐕 {$userProfile.dogName}</div>
+						</div>
+						<div class="bg-base-300/30 rounded-lg p-3">
+							<div class="text-xs text-base-content/40">Breed</div>
+							<div class="font-medium">{$userProfile.dogBreed || '—'}</div>
+						</div>
 					</div>
-				</div>
-				<div class="grid grid-cols-2 gap-3 text-sm">
-					<div class="bg-base-300/30 rounded-lg p-3">
-						<div class="text-xs text-base-content/40">Dog</div>
-						<div class="font-medium">🐕 {$userProfile.dogName}</div>
+				{:else}
+					<div class="space-y-4">
+						<h2 class="font-semibold text-lg">Edit Profile</h2>
+						<div class="form-control">
+							<label class="label text-xs font-medium text-base-content/70 pb-1" for="editDisplayName">Your Name</label>
+							<input id="editDisplayName" type="text" class="input input-sm input-bordered w-full bg-base-200/50 focus:border-primary" bind:value={editDisplayName} />
+						</div>
+						<div class="form-control">
+							<label class="label text-xs font-medium text-base-content/70 pb-1" for="editDogName">Dog's Name</label>
+							<input id="editDogName" type="text" class="input input-sm input-bordered w-full bg-base-200/50 focus:border-primary" bind:value={editDogName} />
+						</div>
+						<div class="form-control">
+							<label class="label text-xs font-medium text-base-content/70 pb-1" for="editDogBreed">Dog's Breed</label>
+							<input id="editDogBreed" type="text" class="input input-sm input-bordered w-full bg-base-200/50 focus:border-primary" bind:value={editDogBreed} />
+						</div>
+						<div class="flex gap-2 pt-2">
+							<button class="btn btn-sm flex-1 rounded-full" onclick={() => isEditingProfile = false} disabled={isSaving}>Cancel</button>
+							<button class="btn btn-sm btn-primary flex-1 rounded-full" onclick={saveProfile} disabled={isSaving}>
+								{isSaving ? 'Saving...' : 'Save'}
+							</button>
+						</div>
 					</div>
-					<div class="bg-base-300/30 rounded-lg p-3">
-						<div class="text-xs text-base-content/40">Breed</div>
-						<div class="font-medium">{$userProfile.dogBreed || '—'}</div>
-					</div>
-				</div>
+				{/if}
 			</div>
 		{/if}
 

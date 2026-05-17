@@ -2,6 +2,7 @@
 	import { encounters, currentUser } from '$lib/stores';
 	import { loadEncounters } from '$lib/encounters';
 	import EditEncounterModal from '$lib/components/EditEncounterModal.svelte';
+	import { getAttitudeInfo } from '$lib/attitude';
 	import type { Encounter } from '$lib/stores';
 	import { onMount } from 'svelte';
 
@@ -40,13 +41,14 @@
 		}).addTo(map);
 
 		for (const enc of $encounters) {
+			const att = getAttitudeInfo(enc.friendliness);
 			const icon = L.divIcon({
-				html: `<div style="font-size:18px">🐕</div>`,
+				html: `<div style="font-size:18px">${att.emoji}</div>`,
 				className: '', iconSize: [18, 18], iconAnchor: [9, 9]
 			});
 			L.marker([enc.location.lat, enc.location.lng], { icon })
 				.addTo(map)
-				.bindPopup(`<b>${enc.dogName}</b><br>${'🐾'.repeat(enc.friendliness)}<br><small>${enc.timestamp.toLocaleString()}</small>`);
+				.bindPopup(`<b>${enc.dogName}</b><br>${att.emoji} ${att.text}<br><small>${enc.timestamp.toLocaleString()}</small>`);
 		}
 
 		if ($encounters.length > 0) {
@@ -102,7 +104,7 @@
 										<div class="text-xs text-base-content/40">{formatDate(enc.timestamp)}</div>
 										{#if enc.notes}<div class="text-xs text-base-content/30 mt-0.5 truncate">{enc.notes}</div>{/if}
 									</div>
-									<div class="text-sm shrink-0">{'🐾'.repeat(enc.friendliness)}</div>
+									<div class="text-xl shrink-0" title={getAttitudeInfo(enc.friendliness).text}>{getAttitudeInfo(enc.friendliness).emoji}</div>
 								</button>
 							{/each}
 						</div>

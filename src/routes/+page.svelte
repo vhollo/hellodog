@@ -4,6 +4,7 @@
 	import { loadEncounters } from '$lib/encounters';
 	import WalkTracker from '$lib/components/WalkTracker.svelte';
 	import EditEncounterModal from '$lib/components/EditEncounterModal.svelte';
+	import { getAttitudeInfo } from '$lib/attitude';
 	import type { Encounter } from '$lib/stores';
 	import { onMount } from 'svelte';
 
@@ -136,7 +137,7 @@
 									<div class="font-medium truncate">{enc.dogName}</div>
 									<div class="text-xs text-base-content/40">{timeAgo(enc.timestamp)}</div>
 								</div>
-								<div class="text-sm shrink-0">{'🐾'.repeat(enc.friendliness)}</div>
+								<div class="text-xl shrink-0" title={getAttitudeInfo(enc.friendliness).text}>{getAttitudeInfo(enc.friendliness).emoji}</div>
 							</button>
 						{/each}
 					</div>
