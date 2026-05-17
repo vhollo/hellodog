@@ -9,6 +9,44 @@
 
 	onMount(() => {
 		initAuth();
+
+		// PWA Automatic Update on Launch
+		if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+			// Listen for the controlling service worker changing (e.g. new SW taking over)
+			navigator.serviceWorker.addEventListener('controllerchange', () => {
+				console.log('[PWA] New service worker activated, reloading to apply updates...');
+				window.location.reload();
+			});
+
+			// Check for updates on launch
+			navigator.serviceWorker.ready.then((registration) => {
+				console.log('[PWA] Service worker is ready. Checking for updates...');
+
+				// 1. If there's a waiting service worker already, force it to activate
+				if (registration.waiting) {
+					console.log('[PWA] Found a waiting service worker. Activating...');
+					registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+				}
+
+				// 2. Listen for new service workers installing
+				registration.addEventListener('updatefound', () => {
+					const newWorker = registration.installing;
+					if (newWorker) {
+						newWorker.addEventListener('statechange', () => {
+							if (newWorker.state === 'installed') {
+								console.log('[PWA] New service worker installed. Skipping waiting...');
+								newWorker.postMessage({ type: 'SKIP_WAITING' });
+							}
+						});
+					}
+				});
+
+				// 3. Trigger manual update check
+				registration.update().catch((err) => {
+					console.error('[PWA] Service worker update check failed:', err);
+				});
+			});
+		}
 	});
 
 	const tabs = [

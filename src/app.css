@@ -5,25 +5,7 @@
 }
 
 @theme {
-  --color-primary: #f59e0b;
-  --color-primary-content: #1a0f00;
-  --color-secondary: #14b8a6;
-  --color-secondary-content: #00150f;
-  --color-accent: #a855f7;
-  --color-accent-content: #ffffff;
-  --color-neutral: #2a2e37;
-  --color-neutral-content: #d4d4d8;
-  --color-base-100: #1d1f27;
-  --color-base-200: #16181e;
-  --color-base-300: #0f1015;
-  --color-base-content: #e4e4e7;
-  --color-info: #3b82f6;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-
   --font-sans: 'Outfit', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
 }
 
 /* Global styles */
