@@ -4,6 +4,8 @@
 	import { loadEncounters } from "$lib/encounters";
 	import WalkTracker from "$lib/components/WalkTracker.svelte";
 	import EditEncounterModal from "$lib/components/EditEncounterModal.svelte";
+	import WeeklyInsights from "$lib/components/WeeklyInsights.svelte";
+	import Milestones from "$lib/components/Milestones.svelte";
 	import { getAttitudeInfo } from "$lib/attitude";
 	import type { Encounter } from "$lib/stores";
 	import { onMount } from "svelte";
@@ -200,12 +202,19 @@
 				</div>
 			</div>
 
-			<div class="animate-fade-in stagger-2">
+			<!-- Weekly Insights -->
+			<WeeklyInsights />
+
+			<!-- Milestones -->
+			<Milestones />
+
+			<!-- Walk Tracker -->
+			<div class="animate-fade-in stagger-3">
 				<WalkTracker />
 			</div>
 
 			{#if recentEncounters.length > 0}
-				<div class="animate-fade-in stagger-3">
+				<div class="animate-fade-in stagger-4">
 					<div class="flex items-center justify-between mb-3">
 						<h2 class="text-lg font-semibold">Recent Encounters</h2>
 						<a href="/history" class="text-primary text-sm hover:underline"
@@ -251,7 +260,7 @@
 			{/if}
 
 			<div
-				class="glass-card p-4 flex items-center gap-3 animate-fade-in stagger-4"
+				class="glass-card p-4 flex items-center gap-3 animate-fade-in stagger-5"
 			>
 				<div class="text-2xl">{$userProfile.isPaid ? "👑" : "🆓"}</div>
 				<div class="flex-1">

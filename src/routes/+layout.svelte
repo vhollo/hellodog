@@ -7,6 +7,7 @@
 		authLoading,
 		activeTab,
 		userProfile,
+		showEncounterModal,
 	} from "$lib/stores";
 	import { page } from "$app/stores";
 
@@ -97,6 +98,18 @@
 {:else}
 	<div class="min-h-screen bg-base-100">
 		{@render children()}
+
+		<!-- Quick-Log FAB (visible on non-home pages) -->
+		{#if $currentUser && $userProfile && $activeTab !== 'home'}
+			<button
+				onclick={() => showEncounterModal.set(true)}
+				class="fab-log-btn"
+				id="fab-quick-log"
+				title="Quick log an encounter"
+			>
+				<span class="text-xl">✍️</span>
+			</button>
+		{/if}
 
 		<!-- Bottom Navigation (only when logged in & profile set up) -->
 		{#if $currentUser && $userProfile}
