@@ -17,6 +17,7 @@ export interface UserProfile {
 	dogBreed?: string;
 	isPaid: boolean;
 	createdAt: Date;
+	homeLocation?: { lat: number; lng: number } | null;
 }
 
 export const userProfile = writable<UserProfile | null>(null);

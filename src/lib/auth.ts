@@ -57,7 +57,8 @@ async function loadUserProfile(uid: string): Promise<void> {
 			dogName: data.dogName,
 			dogBreed: data.dogBreed || '',
 			isPaid: data.isPaid || false,
-			createdAt: data.createdAt?.toDate() || new Date()
+			createdAt: data.createdAt?.toDate() || new Date(),
+			homeLocation: data.homeLocation || null
 		});
 	} else {
 		userProfile.set(null);

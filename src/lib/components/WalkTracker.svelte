@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { walk, currentUser, showEncounterModal, encounters } from '$lib/stores';
-	import { startWalk, stopWalk, formatDuration, getCurrentPosition } from '$lib/geo';
+	import { walk, currentUser, showEncounterModal, encounters, userProfile } from '$lib/stores';
+	import { startWalk, stopWalk, formatDuration, getCurrentPosition, initGeofenceMonitoring, onAutoStop, onAutoStart, type StopReason, type StartReason } from '$lib/geo';
 	import { addEncounter, loadEncounters, generatePredictions } from '$lib/encounters';
 	import { getAttitudeInfo } from '$lib/attitude';
 
@@ -20,6 +20,16 @@
 	let notes = $state('');
 	let saving = $state(false);
 
+	// Auto walk status toast
+	let statusToast = $state('');
+	let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	function showToast(message: string) {
+		statusToast = message;
+		if (toastTimeout) clearTimeout(toastTimeout);
+		toastTimeout = setTimeout(() => { statusToast = ''; }, 4000);
+	}
+
 	// Action to teleport modal to body to escape CSS transform containing blocks
 	function portal(node: HTMLElement) {
 		document.body.appendChild(node);
@@ -34,12 +44,30 @@
 		Array.from(new Set($encounters.map(e => e.dogName))).sort()
 	);
 
+	let hasHome = $derived(!!$userProfile?.homeLocation);
+
 	onMount(async () => {
-		// Start timer if walk is active
+		// Register auto-start/stop callbacks
+		onAutoStart((reason: StartReason) => {
+			if (reason === 'geofence') {
+				showToast('🐕 Walk started — you left home!');
+			}
+			startTimer();
+		});
+
+		onAutoStop((reason: StopReason) => {
+			stopTimer();
+			const msgs: Record<string, string> = {
+				home: '🏠 Walk ended — welcome home!',
+				stationary: '⏸️ Walk ended — you were stationary',
+				background: '📱 Walk ended — app was in background'
+			};
+			showToast(msgs[reason] || 'Walk ended');
+		});
+
+		// Start timer if walk is already active (e.g. page revisit)
 		if ($walk.isWalking && $walk.startTime) {
-			timerInterval = setInterval(() => {
-				timer = formatDuration($walk.startTime!);
-			}, 1000);
+			startTimer();
 		}
 
 		// Init map
@@ -63,6 +91,20 @@
 			marker = L.marker([pos.lat, pos.lng], { icon: pawIcon }).addTo(map);
 			pathLine = L.polyline([], { color: '#f59e0b', weight: 4, opacity: 0.7 }).addTo(map);
 
+			// Show home radius on map if set
+			if ($userProfile?.homeLocation) {
+				const home = $userProfile.homeLocation;
+				L.circle([home.lat, home.lng], {
+					radius: 80,
+					color: '#6366f1',
+					fillColor: '#6366f1',
+					fillOpacity: 0.08,
+					weight: 2,
+					opacity: 0.3,
+					dashArray: '6, 8'
+				}).addTo(map).bindPopup('🏠 Home zone');
+			}
+
 			// Try to get current position
 			try {
 				const geoPos = await getCurrentPosition();
@@ -72,7 +114,25 @@
 				walk.update(w => ({ ...w, currentLocation: { lat: latitude, lng: longitude } }));
 			} catch { /* use default */ }
 		}
+
+		// Initialize geofence monitoring (passive GPS watching)
+		initGeofenceMonitoring();
 	});
+
+	function startTimer() {
+		if (timerInterval) return;
+		timerInterval = setInterval(() => {
+			if ($walk.startTime) timer = formatDuration($walk.startTime);
+		}, 1000);
+	}
+
+	function stopTimer() {
+		if (timerInterval) {
+			clearInterval(timerInterval);
+			timerInterval = null;
+		}
+		timer = '00:00';
+	}
 
 	// Watch walk state for map updates
 	$effect(() => {
@@ -124,20 +184,14 @@
 		}
 	});
 
-	function handleStartWalk() {
-		startWalk();
-		timerInterval = setInterval(() => {
-			timer = formatDuration($walk.startTime!);
-		}, 1000);
+	function handleManualStart() {
+		startWalk('manual');
+		startTimer();
 	}
 
-	function handleStopWalk() {
-		stopWalk();
-		if (timerInterval) {
-			clearInterval(timerInterval);
-			timerInterval = null;
-		}
-		timer = '00:00';
+	function handleManualStop() {
+		stopWalk('manual');
+		stopTimer();
 	}
 
 	async function handleLogEncounter() {
@@ -179,6 +233,7 @@
 
 	onDestroy(() => {
 		if (timerInterval) clearInterval(timerInterval);
+		if (toastTimeout) clearTimeout(toastTimeout);
 		if (map) map.remove();
 		if (typeof document !== 'undefined') {
 			document.body.classList.remove('overflow-hidden');
@@ -196,19 +251,56 @@
 				<div class="w-2.5 h-2.5 rounded-full bg-success animate-pulse"></div>
 				<span class="font-mono font-bold text-lg">{timer}</span>
 			</div>
+		{:else if hasHome}
+			<div class="absolute top-3 left-3 bg-base-100/80 backdrop-blur-md rounded-xl px-3 py-1.5 flex items-center gap-2">
+				<div class="w-2 h-2 rounded-full bg-base-content/20"></div>
+				<span class="text-xs text-base-content/50 font-medium">At home · walk starts when you leave</span>
+			</div>
+		{/if}
+
+		<!-- Toast notification -->
+		{#if statusToast}
+			<div class="absolute bottom-3 left-3 right-3 bg-base-100/95 backdrop-blur-md rounded-xl px-4 py-3 text-sm font-medium text-center animate-slide-up shadow-lg">
+				{statusToast}
+			</div>
 		{/if}
 	</div>
 
 	<!-- Walk Controls -->
 	<div class="flex gap-3">
-		{#if !$walk.isWalking}
-			<button onclick={handleStartWalk} class="btn btn-primary flex-1 rounded-full gap-2 shadow-lg shadow-primary/20" id="btn-walk-start">
-				🐕 Start Walk
-			</button>
+		{#if !hasHome}
+			<!-- No home set: show manual controls -->
+			{#if !$walk.isWalking}
+				<button onclick={handleManualStart} class="btn btn-primary flex-1 rounded-full gap-2 shadow-lg shadow-primary/20" id="btn-walk-start">
+					🐕 Start Walk
+				</button>
+			{:else}
+				<button onclick={handleManualStop} class="btn btn-error flex-1 rounded-full gap-2" id="btn-walk-stop">
+					⏹ Stop Walk
+				</button>
+			{/if}
 		{:else}
-			<button onclick={handleStopWalk} class="btn btn-error flex-1 rounded-full gap-2" id="btn-walk-stop">
-				⏹ Stop Walk
-			</button>
+			<!-- Home is set: show auto-walk status -->
+			{#if $walk.isWalking}
+				<div class="flex-1 flex items-center gap-3 px-4">
+					<div class="w-2.5 h-2.5 rounded-full bg-success animate-pulse shrink-0"></div>
+					<div class="flex-1 min-w-0">
+						<div class="text-sm font-semibold">Walking</div>
+						<div class="text-[10px] text-base-content/40">Auto-stops at home or after 5 min idle</div>
+					</div>
+					<button onclick={handleManualStop} class="btn btn-ghost btn-sm btn-circle text-error" id="btn-walk-stop" title="End walk now">
+						⏹
+					</button>
+				</div>
+			{:else}
+				<div class="flex-1 flex items-center gap-3 px-4">
+					<div class="text-lg">🏠</div>
+					<div class="flex-1 min-w-0">
+						<div class="text-sm font-medium text-base-content/60">Ready to walk</div>
+						<div class="text-[10px] text-base-content/40">Walk starts automatically when you leave home</div>
+					</div>
+				</div>
+			{/if}
 		{/if}
 		<button onclick={() => showEncounterModal.set(true)} class="btn btn-secondary rounded-full gap-2 shadow-lg shadow-secondary/20" id="btn-log-encounter">
 			✍️ Log Meet
@@ -238,14 +330,14 @@
 				<input type="text" id="enc-dog-name" bind:value={dogName} list="dog-names-list" placeholder="e.g. Max" class="input input-bordered w-full bg-base-300/50 focus:border-primary" required autocomplete="off" />
 				<datalist id="dog-names-list">
 					{#each uniqueDogNames as name}
-						<option value={name} />
+						<option value={name}></option>
 					{/each}
 				</datalist>
 			</div>
 
 			<div class="form-control">
-				<label class="label"><span class="label-text font-medium">Attitude</span></label>
-				<div class="flex items-center justify-between gap-1 w-full">
+				<label class="label" for="enc-attitude"><span class="label-text font-medium">Attitude</span></label>
+				<div class="flex items-center justify-between gap-1 w-full" id="enc-attitude">
 					{#each [1, 2, 3, 4, 5] as val}
 						{@const info = getAttitudeInfo(val)}
 						<button

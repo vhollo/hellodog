@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { currentUser, userProfile } from '$lib/stores';
 	import { signOut, updateUserProfile } from '$lib/auth';
+	import { getCurrentPosition } from '$lib/geo';
 	import { goto } from '$app/navigation';
 
 	let isEditingProfile = $state(false);
@@ -36,6 +37,33 @@
 	async function handleSignOut() {
 		await signOut();
 		goto('/');
+	}
+
+	// Home Location
+	let settingHome = $state(false);
+	let homeError = $state('');
+
+	async function setHomeToCurrentLocation() {
+		if (!$currentUser) return;
+		settingHome = true;
+		homeError = '';
+		try {
+			const pos = await getCurrentPosition();
+			const homeLocation = {
+				lat: pos.coords.latitude,
+				lng: pos.coords.longitude
+			};
+			await updateUserProfile($currentUser.uid, { homeLocation } as any);
+		} catch (err: any) {
+			homeError = err?.message || 'Could not get your location';
+		} finally {
+			settingHome = false;
+		}
+	}
+
+	async function clearHomeLocation() {
+		if (!$currentUser) return;
+		await updateUserProfile($currentUser.uid, { homeLocation: null } as any);
 	}
 </script>
 
@@ -100,8 +128,65 @@
 			</div>
 		{/if}
 
-		<!-- Subscription -->
+		<!-- Home Location -->
 		<div class="glass-card p-5 animate-fade-in stagger-2">
+			<div class="flex items-center gap-2 mb-3">
+				<span class="text-xl">🏠</span>
+				<h2 class="font-semibold">Home Location</h2>
+			</div>
+			<p class="text-xs text-base-content/50 mb-4">
+				Set your home so walks start and stop automatically when you leave and return.
+			</p>
+
+			{#if $userProfile?.homeLocation}
+				<div class="flex items-center gap-3 bg-success/8 rounded-xl p-3 mb-3">
+					<div class="w-10 h-10 rounded-full bg-success/15 flex items-center justify-center text-lg">✅</div>
+					<div class="flex-1 min-w-0">
+						<div class="text-sm font-medium">Home is set</div>
+						<div class="text-[10px] text-base-content/40 font-mono">
+							{$userProfile.homeLocation.lat.toFixed(4)}, {$userProfile.homeLocation.lng.toFixed(4)}
+						</div>
+					</div>
+				</div>
+				<div class="flex gap-2">
+					<button
+						onclick={setHomeToCurrentLocation}
+						class="btn btn-sm flex-1 rounded-full gap-1"
+						disabled={settingHome}
+						id="btn-update-home"
+					>
+						{settingHome ? '📡 Locating...' : '📍 Update'}
+					</button>
+					<button
+						onclick={clearHomeLocation}
+						class="btn btn-sm btn-ghost rounded-full text-error"
+						id="btn-clear-home"
+					>
+						Remove
+					</button>
+				</div>
+			{:else}
+				<button
+					onclick={setHomeToCurrentLocation}
+					class="btn btn-primary w-full rounded-full gap-2"
+					disabled={settingHome}
+					id="btn-set-home"
+				>
+					{#if settingHome}
+						<span class="loading loading-spinner loading-sm"></span> Locating...
+					{:else}
+						📍 Use Current Location as Home
+					{/if}
+				</button>
+			{/if}
+
+			{#if homeError}
+				<div class="text-xs text-error mt-2">{homeError}</div>
+			{/if}
+		</div>
+
+		<!-- Subscription -->
+		<div class="glass-card p-5 animate-fade-in stagger-3">
 			<h2 class="font-semibold mb-3">Subscription</h2>
 			<div class="flex items-center gap-3 mb-4">
 				<div class="text-3xl">{$userProfile?.isPaid ? '👑' : '🆓'}</div>
@@ -131,14 +216,14 @@
 		</div>
 
 		<!-- About -->
-		<div class="glass-card p-5 animate-fade-in stagger-3">
+		<div class="glass-card p-5 animate-fade-in stagger-4">
 			<h2 class="font-semibold mb-2">About</h2>
 			<p class="text-sm text-base-content/50">HelloDog v0.1.0</p>
 			<p class="text-xs text-base-content/30 mt-1">Track walks, log dog encounters, predict friendly meets.</p>
 		</div>
 
 		<!-- Sign Out -->
-		<button onclick={handleSignOut} class="btn btn-outline btn-error w-full rounded-full animate-fade-in stagger-4" id="btn-sign-out">
+		<button onclick={handleSignOut} class="btn btn-outline btn-error w-full rounded-full animate-fade-in stagger-5" id="btn-sign-out">
 			Sign Out
 		</button>
 	</div>
