@@ -6,7 +6,9 @@
 	import EditEncounterModal from "$lib/components/EditEncounterModal.svelte";
 	import WeeklyInsights from "$lib/components/WeeklyInsights.svelte";
 	import Milestones from "$lib/components/Milestones.svelte";
+	import QuickActions from "$lib/components/QuickActions.svelte";
 	import { getAttitudeInfo } from "$lib/attitude";
+	import { initGeofenceMonitoring } from "$lib/geo";
 	import type { Encounter } from "$lib/stores";
 	import { onMount } from "svelte";
 
@@ -31,6 +33,10 @@
 		const h = new Date().getHours();
 		greeting =
 			h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+
+		// Initialize geofence monitoring at page level so it runs
+		// regardless of whether the map component is mounted
+		initGeofenceMonitoring();
 	});
 
 	$effect(() => {
@@ -179,6 +185,7 @@
 {:else}
 	<div class="pb-safe">
 		<div class="p-5 pt-8 max-w-lg mx-auto space-y-6">
+			<!-- ① Greeting + Stats -->
 			<div class="animate-fade-in">
 				<p class="text-base-content/50 text-sm font-medium">{greeting}</p>
 				<h1 class="text-2xl font-bold mt-1">
@@ -202,19 +209,19 @@
 				</div>
 			</div>
 
-			<!-- Weekly Insights -->
-			<WeeklyInsights />
+			<!-- ② Quick Actions (primary CTAs) -->
+			<QuickActions />
 
-			<!-- Milestones -->
-			<Milestones />
+			<!-- ③ Walk Tracker (map — only when walking) -->
+			{#if $walk.isWalking}
+				<div class="animate-fade-in">
+					<WalkTracker />
+				</div>
+			{/if}
 
-			<!-- Walk Tracker -->
-			<div class="animate-fade-in stagger-3">
-				<WalkTracker />
-			</div>
-
+			<!-- ④ Recent Encounters -->
 			{#if recentEncounters.length > 0}
-				<div class="animate-fade-in stagger-4">
+				<div class="animate-fade-in stagger-2">
 					<div class="flex items-center justify-between mb-3">
 						<h2 class="text-lg font-semibold">Recent Encounters</h2>
 						<a href="/history" class="text-primary text-sm hover:underline"
@@ -250,7 +257,7 @@
 					</div>
 				</div>
 			{:else}
-				<div class="glass-card p-8 text-center animate-fade-in stagger-3">
+				<div class="glass-card p-8 text-center animate-fade-in stagger-2">
 					<div class="text-5xl mb-3 animate-float">🐾</div>
 					<h3 class="font-semibold mb-1">No encounters yet</h3>
 					<p class="text-base-content/50 text-sm mb-4">
@@ -259,8 +266,15 @@
 				</div>
 			{/if}
 
+			<!-- ⑤ Weekly Insights -->
+			<WeeklyInsights />
+
+			<!-- ⑥ Milestones -->
+			<Milestones />
+
+			<!-- ⑦ Plan Badge -->
 			<div
-				class="glass-card p-4 flex items-center gap-3 animate-fade-in stagger-5"
+				class="glass-card p-4 flex items-center gap-3 animate-fade-in stagger-3"
 			>
 				<div class="text-2xl">{$userProfile.isPaid ? "👑" : "🆓"}</div>
 				<div class="flex-1">
@@ -288,3 +302,6 @@
 		/>
 	{/if}
 {/if}
+
+
+

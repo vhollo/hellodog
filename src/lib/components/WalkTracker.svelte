@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { walk, currentUser, showEncounterModal, encounters, userProfile } from '$lib/stores';
-	import { startWalk, stopWalk, formatDuration, getCurrentPosition, initGeofenceMonitoring, onAutoStop, onAutoStart, type StopReason, type StartReason } from '$lib/geo';
+	import { formatDuration, getCurrentPosition } from '$lib/geo';
 	import { addEncounter, loadEncounters, generatePredictions } from '$lib/encounters';
 	import { getAttitudeInfo } from '$lib/attitude';
 
@@ -20,16 +20,6 @@
 	let notes = $state('');
 	let saving = $state(false);
 
-	// Auto walk status toast
-	let statusToast = $state('');
-	let toastTimeout: ReturnType<typeof setTimeout> | null = null;
-
-	function showToast(message: string) {
-		statusToast = message;
-		if (toastTimeout) clearTimeout(toastTimeout);
-		toastTimeout = setTimeout(() => { statusToast = ''; }, 4000);
-	}
-
 	// Action to teleport modal to body to escape CSS transform containing blocks
 	function portal(node: HTMLElement) {
 		document.body.appendChild(node);
@@ -44,27 +34,7 @@
 		Array.from(new Set($encounters.map(e => e.dogName))).sort()
 	);
 
-	let hasHome = $derived(!!$userProfile?.homeLocation);
-
 	onMount(async () => {
-		// Register auto-start/stop callbacks
-		onAutoStart((reason: StartReason) => {
-			if (reason === 'geofence') {
-				showToast('🐕 Walk started — you left home!');
-			}
-			startTimer();
-		});
-
-		onAutoStop((reason: StopReason) => {
-			stopTimer();
-			const msgs: Record<string, string> = {
-				home: '🏠 Walk ended — welcome home!',
-				stationary: '⏸️ Walk ended — you were stationary',
-				background: '📱 Walk ended — app was in background'
-			};
-			showToast(msgs[reason] || 'Walk ended');
-		});
-
 		// Start timer if walk is already active (e.g. page revisit)
 		if ($walk.isWalking && $walk.startTime) {
 			startTimer();
@@ -115,8 +85,15 @@
 			} catch { /* use default */ }
 		}
 
-		// Initialize geofence monitoring (passive GPS watching)
-		initGeofenceMonitoring();
+	});
+
+	// Watch walk state changes for timer
+	$effect(() => {
+		if ($walk.isWalking && $walk.startTime) {
+			startTimer();
+		} else {
+			stopTimer();
+		}
 	});
 
 	function startTimer() {
@@ -184,16 +161,6 @@
 		}
 	});
 
-	function handleManualStart() {
-		startWalk('manual');
-		startTimer();
-	}
-
-	function handleManualStop() {
-		stopWalk('manual');
-		stopTimer();
-	}
-
 	async function handleLogEncounter() {
 		if (!dogName.trim() || !$currentUser) return;
 		saving = true;
@@ -233,7 +200,6 @@
 
 	onDestroy(() => {
 		if (timerInterval) clearInterval(timerInterval);
-		if (toastTimeout) clearTimeout(toastTimeout);
 		if (map) map.remove();
 		if (typeof document !== 'undefined') {
 			document.body.classList.remove('overflow-hidden');
@@ -251,61 +217,10 @@
 				<div class="w-2.5 h-2.5 rounded-full bg-success animate-pulse"></div>
 				<span class="font-mono font-bold text-lg">{timer}</span>
 			</div>
-		{:else if hasHome}
-			<div class="absolute top-3 left-3 bg-base-100/80 backdrop-blur-md rounded-xl px-3 py-1.5 flex items-center gap-2">
-				<div class="w-2 h-2 rounded-full bg-base-content/20"></div>
-				<span class="text-xs text-base-content/50 font-medium">At home · walk starts when you leave</span>
-			</div>
-		{/if}
-
-		<!-- Toast notification -->
-		{#if statusToast}
-			<div class="absolute bottom-3 left-3 right-3 bg-base-100/95 backdrop-blur-md rounded-xl px-4 py-3 text-sm font-medium text-center animate-slide-up shadow-lg">
-				{statusToast}
-			</div>
 		{/if}
 	</div>
 
-	<!-- Walk Controls -->
-	<div class="flex gap-3">
-		{#if !hasHome}
-			<!-- No home set: show manual controls -->
-			{#if !$walk.isWalking}
-				<button onclick={handleManualStart} class="btn btn-primary flex-1 rounded-full gap-2 shadow-lg shadow-primary/20" id="btn-walk-start">
-					🐕 Start Walk
-				</button>
-			{:else}
-				<button onclick={handleManualStop} class="btn btn-error flex-1 rounded-full gap-2" id="btn-walk-stop">
-					⏹ Stop Walk
-				</button>
-			{/if}
-		{:else}
-			<!-- Home is set: show auto-walk status -->
-			{#if $walk.isWalking}
-				<div class="flex-1 flex items-center gap-3 px-4">
-					<div class="w-2.5 h-2.5 rounded-full bg-success animate-pulse shrink-0"></div>
-					<div class="flex-1 min-w-0">
-						<div class="text-sm font-semibold">Walking</div>
-						<div class="text-[10px] text-base-content/40">Auto-stops at home or after 5 min idle</div>
-					</div>
-					<button onclick={handleManualStop} class="btn btn-ghost btn-sm btn-circle text-error" id="btn-walk-stop" title="End walk now">
-						⏹
-					</button>
-				</div>
-			{:else}
-				<div class="flex-1 flex items-center gap-3 px-4">
-					<div class="text-lg">🏠</div>
-					<div class="flex-1 min-w-0">
-						<div class="text-sm font-medium text-base-content/60">Ready to walk</div>
-						<div class="text-[10px] text-base-content/40">Walk starts automatically when you leave home</div>
-					</div>
-				</div>
-			{/if}
-		{/if}
-		<button onclick={() => showEncounterModal.set(true)} class="btn btn-secondary rounded-full gap-2 shadow-lg shadow-secondary/20" id="btn-log-encounter">
-			✍️ Log Meet
-		</button>
-	</div>
+
 
 	<!-- Walk path stats -->
 	{#if $walk.isWalking}
