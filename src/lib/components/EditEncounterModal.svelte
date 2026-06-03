@@ -1,14 +1,31 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
 	import { updateEncounter, loadEncounters } from '$lib/encounters';
 	import { currentUser, type Encounter } from '$lib/stores';
 	import { getAttitudeInfo } from '$lib/attitude';
 
 	let { encounter, onClose } = $props<{ encounter: Encounter; onClose: () => void }>();
 
-	let dogName = $state(encounter.dogName);
-	let friendliness = $state(encounter.friendliness);
-	let notes = $state(encounter.notes || '');
+	function formatLocalDateTime(date: Date): string {
+		const offset = date.getTimezoneOffset();
+		const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+		return localDate.toISOString().slice(0, 16);
+	}
+
+	// Capture static snapshot at instantiation to prevent Svelte compiler props warning
+	const initialEncounter = encounter;
+
+	let dogName = $state(initialEncounter.dogName);
+	let friendliness = $state(initialEncounter.friendliness);
+	let notes = $state(initialEncounter.notes || '');
 	let saving = $state(false);
+
+	let mapEl: HTMLDivElement | undefined = $state();
+	let map: any = null;
+	let L: any = null;
+	let marker: any = null;
+	let editedLocation = $state({ lat: initialEncounter.location.lat, lng: initialEncounter.location.lng });
+	let encounterTime = $state(formatLocalDateTime(initialEncounter.timestamp));
 
 	function portal(node: HTMLElement) {
 		document.body.appendChild(node);
@@ -19,14 +36,91 @@
 		};
 	}
 
+	onMount(() => {
+		const timer = setTimeout(async () => {
+			if (typeof window !== 'undefined' && mapEl) {
+				L = await import('leaflet');
+				if (!mapEl) return;
+				
+				map = L.map(mapEl).setView([editedLocation.lat, editedLocation.lng], 16);
+				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+					attribution: '© OpenStreetMap',
+					maxZoom: 19
+				}).addTo(map);
+
+				const getIconHtml = (f: number) => {
+					const info = getAttitudeInfo(f);
+					return `<div style="font-size: 26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); display: flex; flex-direction: column; align-items: center; cursor: grab;">
+						<div>${info.emoji}</div>
+						<div style="font-size: 14px; margin-top: -8px;">📍</div>
+					</div>`;
+				};
+
+				const createIcon = (f: number) => {
+					return L.divIcon({
+						html: getIconHtml(f),
+						className: '',
+						iconSize: [32, 42],
+						iconAnchor: [16, 38]
+					});
+				};
+
+				marker = L.marker([editedLocation.lat, editedLocation.lng], {
+					icon: createIcon(friendliness),
+					draggable: true
+				}).addTo(map);
+
+				marker.on('dragend', () => {
+					const latLng = marker.getLatLng();
+					editedLocation = { lat: latLng.lat, lng: latLng.lng };
+				});
+				
+				// Ensure correct size calculations after render/animation
+				map.invalidateSize();
+			}
+		}, 150);
+
+		return () => {
+			clearTimeout(timer);
+		};
+	});
+
+	$effect(() => {
+		if (marker && L) {
+			const getIconHtml = (f: number) => {
+				const info = getAttitudeInfo(f);
+				return `<div style="font-size: 26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); display: flex; flex-direction: column; align-items: center; cursor: grab;">
+					<div>${info.emoji}</div>
+					<div style="font-size: 14px; margin-top: -8px;">📍</div>
+				</div>`;
+			};
+			const newIcon = L.divIcon({
+				html: getIconHtml(friendliness),
+				className: '',
+				iconSize: [32, 42],
+				iconAnchor: [16, 38]
+			});
+			marker.setIcon(newIcon);
+		}
+	});
+
+	onDestroy(() => {
+		if (map) {
+			map.remove();
+			map = null;
+		}
+	});
+
 	async function handleSave() {
 		if (!dogName.trim() || !$currentUser) return;
 		saving = true;
 		try {
-			await updateEncounter($currentUser.uid, encounter.id, {
+			await updateEncounter($currentUser.uid, initialEncounter.id, {
 				dogName: dogName.trim(),
 				friendliness,
-				notes: notes.trim()
+				notes: notes.trim(),
+				location: editedLocation,
+				timestamp: new Date(encounterTime)
 			});
 			await loadEncounters($currentUser.uid);
 			onClose();
@@ -46,6 +140,16 @@
 		<div class="form-control">
 			<label class="label" for="edit-dog-name"><span class="label-text font-medium">Dog's name</span></label>
 			<input type="text" id="edit-dog-name" bind:value={dogName} placeholder="e.g. Max" class="input input-bordered w-full bg-base-300/50 focus:border-primary" required />
+		</div>
+
+		<div class="form-control">
+			<label class="label"><span class="label-text font-medium">Location <span class="text-base-content/40">(drag pin to move)</span></span></label>
+			<div bind:this={mapEl} class="w-full h-40 bg-base-300 rounded-xl overflow-hidden border border-base-content/10 shadow-inner"></div>
+		</div>
+
+		<div class="form-control">
+			<label class="label" for="edit-time"><span class="label-text font-medium">Date & Time</span></label>
+			<input type="datetime-local" id="edit-time" bind:value={encounterTime} class="input input-bordered w-full bg-base-300/50 focus:border-primary text-sm" required />
 		</div>
 
 		<div class="form-control">

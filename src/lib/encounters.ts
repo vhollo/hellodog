@@ -9,6 +9,7 @@ import {
 	Timestamp,
 	limit,
 	updateDoc,
+	getDoc,
 	doc
 } from 'firebase/firestore';
 import { getFirebaseDb } from './firebase';
@@ -63,24 +64,108 @@ export async function updateEncounter(uid: string, encounterId: string, updates:
 	const db = getFirebaseDb();
 	const docRef = doc(db, 'users', uid, 'encounters', encounterId);
 	
-	const dataToUpdate: any = {};
+	const docSnap = await getDoc(docRef);
+	if (!docSnap.exists()) return;
+	const originalData = docSnap.data();
+	const oldDogName = originalData.dogName;
+	const originalTimestamp = originalData.timestamp;
+	
+	const newName = updates.dogName?.trim();
+	const nameChanged = newName && oldDogName && newName !== oldDogName.trim();
+	
+	let resolvedMetUserId = updates.metUserId;
 	if (updates.dogName !== undefined) {
-		dataToUpdate.dogName = updates.dogName;
-		
 		// Try to match the edited dog name to a registered user
 		const usersRef = collection(db, 'users');
 		const qUser = query(usersRef, where('dogName', '==', updates.dogName.trim()), limit(1));
 		const snap = await getDocs(qUser);
 		if (!snap.empty) {
-			dataToUpdate.metUserId = snap.docs[0].id;
+			resolvedMetUserId = snap.docs[0].id;
 		} else {
-			dataToUpdate.metUserId = null;
+			resolvedMetUserId = null;
 		}
+	}
+	
+	const dataToUpdate: any = {};
+	if (updates.dogName !== undefined) {
+		dataToUpdate.dogName = newName;
+		dataToUpdate.metUserId = resolvedMetUserId;
 	}
 	if (updates.friendliness !== undefined) dataToUpdate.friendliness = updates.friendliness;
 	if (updates.notes !== undefined) dataToUpdate.notes = updates.notes;
+	if (updates.location !== undefined) dataToUpdate.location = updates.location;
+	if (updates.timestamp !== undefined) dataToUpdate.timestamp = Timestamp.fromDate(updates.timestamp);
 	
-	await updateDoc(docRef, dataToUpdate);
+	if (nameChanged) {
+		// Update all local encounters for this user with the same old name
+		const userEncRef = collection(db, 'users', uid, 'encounters');
+		const qUserEnc = query(userEncRef, where('dogName', '==', oldDogName.trim()));
+		const userEncSnap = await getDocs(qUserEnc);
+		
+		const promises = userEncSnap.docs.map(docSnap => {
+			if (docSnap.id === encounterId) {
+				return updateDoc(docSnap.ref, dataToUpdate);
+			} else {
+				return updateDoc(docSnap.ref, {
+					dogName: newName,
+					metUserId: resolvedMetUserId
+				});
+			}
+		});
+		await Promise.all(promises);
+
+		// Update corresponding global encounters reported by this user with the same old name
+		const globalRef = collection(db, 'encounters_global');
+		const qGlobal = query(globalRef, where('reportedByUid', '==', uid), where('dogName', '==', oldDogName.trim()));
+		const globalSnap = await getDocs(qGlobal);
+		
+		const globalPromises = globalSnap.docs.map(docSnap => {
+			const d = docSnap.data();
+			const isSpecificMeet = originalTimestamp && d.timestamp && d.timestamp.toMillis() === originalTimestamp.toMillis();
+			if (isSpecificMeet) {
+				const globalUpdate: any = {
+					dogName: newName,
+					metUserId: resolvedMetUserId
+				};
+				if (updates.friendliness !== undefined) globalUpdate.friendliness = updates.friendliness;
+				if (updates.notes !== undefined) globalUpdate.notes = updates.notes;
+				if (updates.location !== undefined) globalUpdate.location = updates.location;
+				if (updates.timestamp !== undefined) globalUpdate.timestamp = Timestamp.fromDate(updates.timestamp);
+				return updateDoc(docSnap.ref, globalUpdate);
+			} else {
+				return updateDoc(docSnap.ref, {
+					dogName: newName,
+					metUserId: resolvedMetUserId
+				});
+			}
+		});
+		await Promise.all(globalPromises);
+	} else {
+		// Just update the single local encounter
+		await updateDoc(docRef, dataToUpdate);
+
+		// If name didn't change, still update the corresponding global doc if other fields changed
+		if (originalTimestamp) {
+			const globalRef = collection(db, 'encounters_global');
+			const qGlobal = query(globalRef, where('reportedByUid', '==', uid), where('dogName', '==', oldDogName.trim()));
+			const globalSnap = await getDocs(qGlobal);
+			
+			const globalPromises = globalSnap.docs.map(docSnap => {
+				const d = docSnap.data();
+				const isSpecificMeet = d.timestamp && d.timestamp.toMillis() === originalTimestamp.toMillis();
+				if (isSpecificMeet) {
+					const globalUpdate: any = {};
+					if (updates.friendliness !== undefined) globalUpdate.friendliness = updates.friendliness;
+					if (updates.notes !== undefined) globalUpdate.notes = updates.notes;
+					if (updates.location !== undefined) globalUpdate.location = updates.location;
+					if (updates.timestamp !== undefined) globalUpdate.timestamp = Timestamp.fromDate(updates.timestamp);
+					return updateDoc(docSnap.ref, globalUpdate);
+				}
+				return Promise.resolve();
+			});
+			await Promise.all(globalPromises);
+		}
+	}
 }
 
 export async function loadEncounters(uid: string): Promise<void> {
@@ -133,13 +218,13 @@ function getHourBucket(date: Date): string {
 
 function formatHourRange(bucket: string): string {
 	const ranges: Record<string, string> = {
-		'early-morning': '5–6 AM',
-		'morning': '7–9 AM',
-		'late-morning': '9–12 PM',
-		'midday': '12–2 PM',
-		'afternoon': '2–5 PM',
-		'evening': '5–8 PM',
-		'night': '8–11 PM'
+		'early-morning': '05:00–06:00',
+		'morning': '07:00–09:00',
+		'late-morning': '09:00–12:00',
+		'midday': '12:00–14:00',
+		'afternoon': '14:00–17:00',
+		'evening': '17:00–20:00',
+		'night': '20:00–23:00'
 	};
 	return ranges[bucket] || bucket;
 }

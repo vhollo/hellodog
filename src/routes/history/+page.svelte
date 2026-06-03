@@ -4,13 +4,15 @@
 	import EditEncounterModal from '$lib/components/EditEncounterModal.svelte';
 	import { getAttitudeInfo } from '$lib/attitude';
 	import type { Encounter } from '$lib/stores';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 
 	let filter = $state('');
 	let editingEncounter: Encounter | null = $state(null);
 	let view = $state<'list' | 'map'>('list');
 	let mapEl: HTMLDivElement | undefined = $state();
-	let map: any = null;
+	let map: any = $state(null);
+	let markersGroup: any = $state(null);
+	let L_Lib: any = $state(null);
 
 	let filtered = $derived(
 		filter
@@ -29,33 +31,31 @@
 	});
 
 	onMount(() => {
+		if (typeof window !== 'undefined') {
+			(window as any).openEditEncounter = (id: string) => {
+				const found = $encounters.find(e => e.id === id);
+				if (found) editingEncounter = found;
+			};
+		}
 		if ($currentUser) loadEncounters($currentUser.uid);
+	});
+
+	onDestroy(() => {
+		if (typeof window !== 'undefined') {
+			delete (window as any).openEditEncounter;
+		}
 	});
 
 	async function initMap() {
 		if (!mapEl || map || view !== 'map') return;
-		const L = await import('leaflet');
+		L_Lib = await import('leaflet');
 		if (!mapEl || map || view !== 'map') return;
-		map = L.map(mapEl).setView([47.5, 19.04], 12);
-		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		map = L_Lib.map(mapEl).setView([47.5, 19.04], 12);
+		L_Lib.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 			attribution: '© OpenStreetMap', maxZoom: 19
 		}).addTo(map);
 
-		for (const enc of $encounters) {
-			const att = getAttitudeInfo(enc.friendliness);
-			const icon = L.divIcon({
-				html: `<div style="font-size:18px">${att.emoji}</div>`,
-				className: '', iconSize: [18, 18], iconAnchor: [9, 9]
-			});
-			L.marker([enc.location.lat, enc.location.lng], { icon })
-				.addTo(map)
-				.bindPopup(`<b>${enc.dogName}</b><br>${att.emoji} ${att.text}<br><small>${enc.timestamp.toLocaleString()}</small>`);
-		}
-
-		if ($encounters.length > 0) {
-			const bounds = L.latLngBounds($encounters.map(e => [e.location.lat, e.location.lng]));
-			map.fitBounds(bounds, { padding: [30, 30] });
-		}
+		markersGroup = L_Lib.layerGroup().addTo(map);
 	}
 
 	$effect(() => {
@@ -66,13 +66,79 @@
 				if (map) {
 					map.remove();
 					map = null;
+					markersGroup = null;
+					L_Lib = null;
 				}
 			};
 		}
 	});
 
+	$effect(() => {
+		const currentEncounters = filtered;
+		if (!map || !markersGroup || !L_Lib) return;
+
+		// Clear old markers
+		markersGroup.clearLayers();
+
+		const groupedByLocation = new Map<string, Encounter[]>();
+		for (const enc of currentEncounters) {
+			const key = `${enc.location.lat.toFixed(5)},${enc.location.lng.toFixed(5)}`;
+			if (!groupedByLocation.has(key)) {
+				groupedByLocation.set(key, []);
+			}
+			groupedByLocation.get(key)!.push(enc);
+		}
+
+		for (const [coordStr, encs] of groupedByLocation.entries()) {
+			const [lat, lng] = coordStr.split(',').map(Number);
+			encs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+			
+			const latestEnc = encs[0];
+			const att = getAttitudeInfo(latestEnc.friendliness);
+			
+			let popupContent = '';
+			if (encs.length === 1) {
+				popupContent = `<a href="javascript:void(0)" onclick="openEditEncounter('${latestEnc.id}')" style="font-weight: bold; text-decoration: underline; color: var(--color-primary); cursor: pointer;">${latestEnc.dogName}</a><br>${att.emoji} ${att.text}<br><small>${latestEnc.timestamp.toLocaleString('en-US', { hour12: false })}</small>`;
+			} else {
+				popupContent = `<div style="max-height: 180px; overflow-y: auto; padding-right: 4px;">`;
+				popupContent += `<div style="font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 6px;">${encs.length} Meets Here</div>`;
+				for (const enc of encs) {
+					const curAtt = getAttitudeInfo(enc.friendliness);
+					popupContent += `
+						<div style="margin-bottom: 8px; border-bottom: 1px dashed #eee; padding-bottom: 4px;">
+							<a href="javascript:void(0)" onclick="openEditEncounter('${enc.id}')" style="font-weight: bold; text-decoration: underline; color: var(--color-primary); cursor: pointer;">${enc.dogName}</a><br>
+							${curAtt.emoji} ${curAtt.text}<br>
+							<small style="color: #666;">${enc.timestamp.toLocaleString('en-US', { hour12: false })}</small>
+						</div>
+					`;
+				}
+				popupContent += `</div>`;
+			}
+
+			let htmlContent = `<div style="position: relative; font-size: 18px;">${att.emoji}`;
+			if (encs.length > 1) {
+				htmlContent += `<span style="position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; font-size: 8px; font-weight: bold; border-radius: 9999px; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; border: 1px solid white; line-height: 1;">${encs.length}</span>`;
+			}
+			htmlContent += `</div>`;
+
+			const icon = L_Lib.divIcon({
+				html: htmlContent,
+				className: '', iconSize: [18, 18], iconAnchor: [9, 9]
+			});
+
+			L_Lib.marker([lat, lng], { icon })
+				.addTo(markersGroup)
+				.bindPopup(popupContent);
+		}
+
+		if (currentEncounters.length > 0) {
+			const bounds = L_Lib.latLngBounds(currentEncounters.map(e => [e.location.lat, e.location.lng]));
+			map.fitBounds(bounds, { padding: [30, 30] });
+		}
+	});
+
 	function formatDate(d: Date): string {
-		return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+		return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 	}
 </script>
 

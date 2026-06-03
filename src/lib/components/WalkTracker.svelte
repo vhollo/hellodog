@@ -20,6 +20,19 @@
 	let notes = $state('');
 	let saving = $state(false);
 
+	// Modal map & time state
+	let modalMapEl: HTMLDivElement | undefined = $state();
+	let modalMap: any = null;
+	let modalMarker: any = null;
+	let encounterLocation = $state({ lat: 0, lng: 0 });
+	let encounterTime = $state('');
+
+	function formatLocalDateTime(date: Date): string {
+		const offset = date.getTimezoneOffset();
+		const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+		return localDate.toISOString().slice(0, 16);
+	}
+
 	// Action to teleport modal to body to escape CSS transform containing blocks
 	function portal(node: HTMLElement) {
 		document.body.appendChild(node);
@@ -161,22 +174,99 @@
 		}
 	});
 
+	// Handle showEncounterModal life cycle: initialize location and time
+	$effect(() => {
+		if ($showEncounterModal) {
+			encounterLocation = $walk.currentLocation || { lat: 47.5, lng: 19.04 };
+			encounterTime = formatLocalDateTime(new Date());
+
+			const timer = setTimeout(async () => {
+				if (typeof window !== 'undefined' && modalMapEl && L) {
+					modalMap = L.map(modalMapEl).setView([encounterLocation.lat, encounterLocation.lng], 16);
+					L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+						attribution: '© OpenStreetMap',
+						maxZoom: 19
+					}).addTo(modalMap);
+
+					const getIconHtml = (f: number) => {
+						const info = getAttitudeInfo(f);
+						return `<div style="font-size: 26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); display: flex; flex-direction: column; align-items: center; cursor: grab;">
+							<div>${info.emoji}</div>
+							<div style="font-size: 14px; margin-top: -8px;">📍</div>
+						</div>`;
+					};
+
+					const createIcon = (f: number) => {
+						return L.divIcon({
+							html: getIconHtml(f),
+							className: '',
+							iconSize: [32, 42],
+							iconAnchor: [16, 38]
+						});
+					};
+
+					modalMarker = L.marker([encounterLocation.lat, encounterLocation.lng], {
+						icon: createIcon(friendliness),
+						draggable: true
+					}).addTo(modalMap);
+
+					modalMarker.on('dragend', () => {
+						const latLng = modalMarker.getLatLng();
+						encounterLocation = { lat: latLng.lat, lng: latLng.lng };
+					});
+
+					modalMap.invalidateSize();
+				}
+			}, 150);
+
+			return () => {
+				clearTimeout(timer);
+				if (modalMap) {
+					modalMap.remove();
+					modalMap = null;
+					modalMarker = null;
+				}
+			};
+		}
+	});
+
+	// Reactively update modal pin icon based on attitude selection
+	$effect(() => {
+		if (modalMarker && L) {
+			const getIconHtml = (f: number) => {
+				const info = getAttitudeInfo(f);
+				return `<div style="font-size: 26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); display: flex; flex-direction: column; align-items: center; cursor: grab;">
+					<div>${info.emoji}</div>
+					<div style="font-size: 14px; margin-top: -8px;">📍</div>
+				</div>`;
+			};
+			const newIcon = L.divIcon({
+				html: getIconHtml(friendliness),
+				className: '',
+				iconSize: [32, 42],
+				iconAnchor: [16, 38]
+			});
+			modalMarker.setIcon(newIcon);
+		}
+	});
+
 	async function handleLogEncounter() {
 		if (!dogName.trim() || !$currentUser) return;
 		saving = true;
-		const loc = $walk.currentLocation || { lat: 0, lng: 0 };
+		const loc = encounterLocation;
+		const time = encounterTime ? new Date(encounterTime) : new Date();
 		try {
 			await addEncounter($currentUser.uid, {
 				dogName: dogName.trim(),
 				friendliness,
 				notes: notes.trim(),
 				location: loc,
-				timestamp: new Date(),
+				timestamp: time,
 				metUserId: null
 			});
 			await loadEncounters($currentUser.uid);
 
-			// Add encounter marker on map
+			// Add encounter marker on main map
 			if (map && L) {
 				const att = getAttitudeInfo(friendliness);
 				const encIcon = L.divIcon({
@@ -220,8 +310,6 @@
 		{/if}
 	</div>
 
-
-
 	<!-- Walk path stats -->
 	{#if $walk.isWalking}
 		<div class="glass-card p-4 grid grid-cols-2 gap-4">
@@ -248,6 +336,16 @@
 						<option value={name}></option>
 					{/each}
 				</datalist>
+			</div>
+
+			<div class="form-control">
+				<label class="label"><span class="label-text font-medium">Location <span class="text-base-content/40">(drag pin to move)</span></span></label>
+				<div bind:this={modalMapEl} class="w-full h-40 bg-base-300 rounded-xl overflow-hidden border border-base-content/10 shadow-inner"></div>
+			</div>
+
+			<div class="form-control">
+				<label class="label" for="enc-time"><span class="label-text font-medium">Date & Time</span></label>
+				<input type="datetime-local" id="enc-time" bind:value={encounterTime} class="input input-bordered w-full bg-base-300/50 focus:border-primary text-sm" required />
 			</div>
 
 			<div class="form-control">
