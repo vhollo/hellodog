@@ -56,6 +56,19 @@ export const walk = writable<WalkState>({
 	encountersDuringWalk: []
 });
 
+// Summary of the most recently completed walk, surfaced on the dashboard
+// until dismissed. Null when there's nothing to show.
+export interface WalkSummary {
+	startTime: Date;
+	endTime: Date;
+	durationMs: number;
+	distanceMeters: number;
+	encounterCount: number;
+	reason: string;
+}
+
+export const lastWalk = writable<WalkSummary | null>(null);
+
 // ──────────────────────────────────────────
 // Predictions
 // ──────────────────────────────────────────

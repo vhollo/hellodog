@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { updateEncounter, loadEncounters } from '$lib/encounters';
+	import { updateEncounter, loadEncounters, deleteEncounter } from '$lib/encounters';
 	import { currentUser, type Encounter } from '$lib/stores';
 	import { getAttitudeInfo } from '$lib/attitude';
 
 	let { encounter, onClose } = $props<{ encounter: Encounter; onClose: () => void }>();
+
+	let confirmingDelete = $state(false);
+	let deleting = $state(false);
 
 	function formatLocalDateTime(date: Date): string {
 		const offset = date.getTimezoneOffset();
@@ -128,13 +131,32 @@
 			saving = false;
 		}
 	}
+
+	async function handleDelete() {
+		if (!$currentUser || !initialEncounter.id) return;
+		deleting = true;
+		try {
+			await deleteEncounter($currentUser.uid, initialEncounter.id);
+			onClose();
+		} finally {
+			deleting = false;
+		}
+	}
 </script>
 
-<div use:portal class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-4" onclick={onClose}>
-	<div class="bg-base-200 rounded-2xl w-full max-w-md p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
+<div use:portal class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-4" role="presentation" onclick={onClose}>
+	<div
+		class="bg-base-200 rounded-2xl w-full max-w-md p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Edit dog encounter"
+		tabindex="-1"
+		onclick={(e) => e.stopPropagation()}
+		onkeydown={(e) => e.key === 'Escape' && onClose()}
+	>
 		<div class="flex items-center justify-between">
 			<h2 class="text-xl font-bold">Edit Meet 🐕</h2>
-			<button onclick={onClose} class="btn btn-ghost btn-sm btn-circle">✕</button>
+			<button onclick={onClose} class="btn btn-ghost btn-sm btn-circle" aria-label="Close">✕</button>
 		</div>
 
 		<div class="form-control">
@@ -143,7 +165,7 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label"><span class="label-text font-medium">Location <span class="text-base-content/40">(drag pin to move)</span></span></label>
+			<span class="label"><span class="label-text font-medium">Location <span class="text-base-content/40">(drag pin to move)</span></span></span>
 			<div bind:this={mapEl} class="w-full h-40 bg-base-300 rounded-xl overflow-hidden border border-base-content/10 shadow-inner"></div>
 		</div>
 
@@ -153,13 +175,15 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label"><span class="label-text font-medium">Attitude</span></label>
+			<span class="label"><span class="label-text font-medium">Attitude</span></span>
 			<div class="flex items-center justify-between gap-1 w-full">
-				{#each [1, 2, 3, 4, 5] as val}
+				{#each [1, 2, 3, 4, 5] as val (val)}
 					{@const info = getAttitudeInfo(val)}
 					<button
 						type="button"
 						onclick={() => friendliness = val}
+						aria-pressed={friendliness === val}
+						aria-label={info.text}
 						class="flex flex-col flex-1 items-center justify-center p-2 rounded-xl border-2 transition-all hover:scale-105 {friendliness === val ? 'border-primary bg-primary/10' : 'border-transparent bg-base-300/50 grayscale opacity-50'}"
 					>
 						<span class="text-2xl">{info.emoji}</span>
@@ -177,5 +201,24 @@
 		<button onclick={handleSave} disabled={!dogName.trim() || saving} class="btn btn-primary w-full rounded-full" id="btn-save-edit">
 			{saving ? 'Saving...' : 'Save Changes 🐾'}
 		</button>
+
+		{#if !confirmingDelete}
+			<button
+				type="button"
+				onclick={() => (confirmingDelete = true)}
+				class="btn btn-ghost btn-sm w-full rounded-full text-error hover:bg-error/10"
+				id="btn-delete-encounter"
+			>
+				🗑 Delete encounter
+			</button>
+		{:else}
+			<div class="flex items-center gap-2 rounded-xl bg-error/10 p-2.5">
+				<span class="text-xs text-base-content/70 flex-1 pl-1">Delete this meet permanently?</span>
+				<button type="button" onclick={() => (confirmingDelete = false)} class="btn btn-ghost btn-xs rounded-full" disabled={deleting}>Cancel</button>
+				<button type="button" onclick={handleDelete} class="btn btn-error btn-xs rounded-full" disabled={deleting} id="btn-confirm-delete">
+					{deleting ? 'Deleting…' : 'Delete'}
+				</button>
+			</div>
+		{/if}
 	</div>
 </div>

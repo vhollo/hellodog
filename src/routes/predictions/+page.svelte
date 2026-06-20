@@ -10,6 +10,10 @@
 	onMount(async () => {
 		if ($currentUser) {
 			await loadEncounters($currentUser.uid);
+			// Auto-generate so the page never dead-ends on an empty screen.
+			if ($encounters.length > 0 && $predictions.length === 0) {
+				await runPredictions();
+			}
 		}
 	});
 
@@ -53,11 +57,13 @@
 			</p>
 		</div>
 
-		<button onclick={runPredictions} disabled={loading || $encounters.length === 0} class="btn btn-primary w-full rounded-full gap-2 animate-fade-in stagger-1" id="btn-run-predictions">
+		<button onclick={runPredictions} disabled={loading || $encounters.length === 0} class="btn {sorted.length > 0 ? 'btn-outline' : 'btn-primary'} w-full rounded-full gap-2 animate-fade-in stagger-1" id="btn-run-predictions">
 			{#if loading}
 				<span class="loading loading-spinner loading-sm"></span> Analyzing...
+			{:else if sorted.length > 0}
+				🔄 Refresh predictions
 			{:else}
-				🔮 Generate Predictions
+				🔮 Generate predictions
 			{/if}
 		</button>
 

@@ -10,6 +10,7 @@ import {
 	limit,
 	updateDoc,
 	getDoc,
+	deleteDoc,
 	doc
 } from 'firebase/firestore';
 import { getFirebaseDb } from './firebase';
@@ -168,6 +169,35 @@ export async function updateEncounter(uid: string, encounterId: string, updates:
 	}
 }
 
+export async function deleteEncounter(uid: string, encounterId: string): Promise<void> {
+	const db = getFirebaseDb();
+	const docRef = doc(db, 'users', uid, 'encounters', encounterId);
+
+	// Read first so we can find and remove the denormalized global twin.
+	const docSnap = await getDoc(docRef);
+	const data = docSnap.exists() ? docSnap.data() : null;
+
+	await deleteDoc(docRef);
+
+	// Remove the matching global doc (same reporter, dog name, and timestamp).
+	if (data?.dogName && data?.timestamp) {
+		const globalRef = collection(db, 'encounters_global');
+		const qGlobal = query(
+			globalRef,
+			where('reportedByUid', '==', uid),
+			where('dogName', '==', data.dogName)
+		);
+		const globalSnap = await getDocs(qGlobal);
+		const deletions = globalSnap.docs
+			.filter((d) => d.data().timestamp?.toMillis?.() === data.timestamp.toMillis())
+			.map((d) => deleteDoc(d.ref));
+		await Promise.all(deletions);
+	}
+
+	// Optimistically drop it from the local store.
+	encounters.update((list) => list.filter((e) => e.id !== encounterId));
+}
+
 export async function loadEncounters(uid: string): Promise<void> {
 	const db = getFirebaseDb();
 	const encRef = collection(db, 'users', uid, 'encounters');
@@ -287,7 +317,7 @@ export function generatePredictions(userEncounters: Encounter[], globalEncounter
 		const dayMs = 86400000;
 		const recentCount = encs.filter((e) => now - e.timestamp.getTime() < 14 * dayMs).length;
 		const frequency = Math.min(100, Math.round((recentCount / 14) * 100));
-		const likelihood = Math.min(95, Math.max(5, frequency + avgFriendliness * 5));
+		const likelihood = Math.round(Math.min(95, Math.max(5, frequency + avgFriendliness * 5)));
 
 		// Count unique reporters for paid tier
 		const uniqueReporters = new Set(encs.map((e) => (e as any).reportedByUid).filter(Boolean));

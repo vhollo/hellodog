@@ -1,4 +1,4 @@
-import { walk, userProfile } from './stores';
+import { walk, userProfile, lastWalk } from './stores';
 import { get } from 'svelte/store';
 
 let watchId: number | null = null;
@@ -242,6 +242,20 @@ export function stopWalk(reason: StopReason = 'manual'): void {
 	stopStationaryCheck();
 	stopVisibilityWatch();
 
+	// Capture a summary of the walk we're ending so we can show it afterwards.
+	const w = get(walk);
+	if (w.isWalking && w.startTime) {
+		const endTime = new Date();
+		lastWalk.set({
+			startTime: w.startTime,
+			endTime,
+			durationMs: endTime.getTime() - w.startTime.getTime(),
+			distanceMeters: pathDistanceMeters(w.path),
+			encounterCount: w.encountersDuringWalk.length,
+			reason
+		});
+	}
+
 	walk.update((w) => ({
 		...w,
 		isWalking: false
@@ -265,4 +279,19 @@ export function formatDuration(startTime: Date): string {
 	const mins = Math.floor(diff / 60000);
 	const secs = Math.floor((diff % 60000) / 1000);
 	return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/** Total length in meters of a recorded GPS path */
+export function pathDistanceMeters(path: Array<{ lat: number; lng: number }>): number {
+	let total = 0;
+	for (let i = 1; i < path.length; i++) {
+		total += distanceMeters(path[i - 1].lat, path[i - 1].lng, path[i].lat, path[i].lng);
+	}
+	return total;
+}
+
+/** Human-friendly distance string (m below 1 km, otherwise km) */
+export function formatDistance(meters: number): string {
+	if (meters < 1000) return `${Math.round(meters)} m`;
+	return `${(meters / 1000).toFixed(2)} km`;
 }

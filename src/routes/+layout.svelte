@@ -10,6 +10,7 @@
 		showEncounterModal,
 	} from "$lib/stores";
 	import { page } from "$app/stores";
+	import LogEncounterModal from "$lib/components/LogEncounterModal.svelte";
 
 	let { children }: { children: Snippet } = $props();
 
@@ -98,6 +99,11 @@
 {:else}
 	<div class="min-h-screen bg-base-100">
 		{@render children()}
+
+		<!-- Global Log-Encounter modal — available from any page / walk state -->
+		{#if $currentUser && $userProfile && $showEncounterModal}
+			<LogEncounterModal />
+		{/if}
 
 		<!-- Quick-Log FAB (visible on non-home pages) -->
 		{#if $currentUser && $userProfile && $activeTab !== 'home'}

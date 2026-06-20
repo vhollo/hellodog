@@ -7,6 +7,7 @@
 	import WeeklyInsights from "$lib/components/WeeklyInsights.svelte";
 	import Milestones from "$lib/components/Milestones.svelte";
 	import QuickActions from "$lib/components/QuickActions.svelte";
+	import WalkSummaryCard from "$lib/components/WalkSummaryCard.svelte";
 	import { getAttitudeInfo } from "$lib/attitude";
 	import { initGeofenceMonitoring } from "$lib/geo";
 	import type { Encounter } from "$lib/stores";
@@ -15,13 +16,13 @@
 	let greeting = $state("");
 	let recentEncounters = $derived($encounters.slice(0, 5));
 	let totalEncounters = $derived($encounters.length);
-	let avgFriendliness = $derived(
+	let avgNum = $derived(
 		$encounters.length > 0
-			? (
-					$encounters.reduce((s, e) => s + e.friendliness, 0) /
-					$encounters.length
-				).toFixed(1)
-			: "—",
+			? $encounters.reduce((s, e) => s + e.friendliness, 0) / $encounters.length
+			: 0,
+	);
+	let avgFriendliness = $derived(
+		$encounters.length > 0 ? avgNum.toFixed(1) : "—",
 	);
 	let uniqueDogs = $derived(
 		new Set($encounters.map((e) => e.dogName.toLowerCase())).size,
@@ -195,22 +196,37 @@
 			</div>
 
 			<div class="grid grid-cols-3 gap-3 animate-fade-in stagger-1">
-				<div class="glass-card p-4 text-center">
+				<a
+					href="/history"
+					class="glass-card p-4 text-center hover:bg-base-content/5 transition-colors"
+				>
 					<div class="text-2xl font-bold text-primary">{totalEncounters}</div>
 					<div class="text-xs text-base-content/50 mt-1">Meets</div>
-				</div>
-				<div class="glass-card p-4 text-center">
+				</a>
+				<a
+					href="/history"
+					class="glass-card p-4 text-center hover:bg-base-content/5 transition-colors"
+				>
 					<div class="text-2xl font-bold text-secondary">{uniqueDogs}</div>
 					<div class="text-xs text-base-content/50 mt-1">Dogs</div>
-				</div>
-				<div class="glass-card p-4 text-center">
-					<div class="text-2xl font-bold text-accent">{avgFriendliness}</div>
-					<div class="text-xs text-base-content/50 mt-1">Avg 🐾</div>
-				</div>
+				</a>
+				<a
+					href="/predictions"
+					class="glass-card p-4 text-center hover:bg-base-content/5 transition-colors"
+				>
+					<div class="text-2xl font-bold text-accent flex items-center justify-center gap-1">
+						{avgFriendliness}
+						{#if avgNum > 0}<span class="text-lg">{getAttitudeInfo(avgNum).emoji}</span>{/if}
+					</div>
+					<div class="text-xs text-base-content/50 mt-1">Avg vibe</div>
+				</a>
 			</div>
 
 			<!-- ② Quick Actions (primary CTAs) -->
 			<QuickActions />
+
+			<!-- Post-walk summary (after a walk ends) -->
+			<WalkSummaryCard />
 
 			<!-- ③ Walk Tracker (map — only when walking) -->
 			{#if $walk.isWalking}
