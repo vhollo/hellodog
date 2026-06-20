@@ -1,0 +1,104 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isPaidUser() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isPaid == true;
+    }
+
+    function isString(val) {
+      return val is string;
+    }
+
+    function isValidString(val, maxLen) {
+      return isString(val) && val.size() <= maxLen;
+    }
+
+    function isNumber(val) {
+      return val is int || val is float;
+    }
+
+    function isValidLocation(loc) {
+      return loc == null || (loc is map && isNumber(loc.lat) && isNumber(loc.lng));
+    }
+
+    // --- Validation Rules ---
+    function isValidUserProfile(data) {
+      return isValidString(data.displayName, 150) &&
+        isValidString(data.dogName, 100) &&
+        (!data.keys().hasAll(['dogBreed']) || isValidString(data.dogBreed, 100)) &&
+        (!data.keys().hasAll(['homeLocation']) || isValidLocation(data.homeLocation)) &&
+        (!data.keys().hasAll(['createdAt']) || data.createdAt is timestamp);
+    }
+
+    function isValidEncounter(data) {
+      return isValidString(data.dogName, 100) &&
+        data.friendliness is int &&
+        data.friendliness >= 1 && data.friendliness <= 5 &&
+        isValidString(data.notes, 1000) &&
+        (data.location is map && isNumber(data.location.lat) && isNumber(data.location.lng)) &&
+        data.timestamp is timestamp &&
+        (data.metUserId == null || isValidString(data.metUserId, 100));
+    }
+
+    // --- Rules Definitions ---
+
+    // 1. Users profiles and private data
+    match /users/{uid} {
+      allow get: if isOwner(uid);
+      allow list: if isAuthenticated(); // Allowed for searching dogName to match users
+
+      allow create: if isOwner(uid) && 
+        isValidUserProfile(request.resource.data) &&
+        (!request.resource.data.keys().hasAll(['isPaid']) || request.resource.data.isPaid == false);
+      
+      allow update: if isOwner(uid) && 
+        isValidUserProfile(request.resource.data) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPaid']) || 
+          request.resource.data.isPaid == resource.data.isPaid ||
+          (!resource.data.keys().hasAll(['isPaid']) && request.resource.data.isPaid == false)
+        );
+
+      // Private encounters subcollection (Only owner can read/write)
+      match /encounters/{encounterId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && isValidEncounter(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    // 2. Global encounters feed (Paid-tier feature)
+    match /encounters_global/{encounterId} {
+      // Paid users can read the whole global feed (the cross-user feature).
+      // Any user may read/query the encounters they reported themselves —
+      // required to keep their denormalized global docs in sync on edit/delete.
+      allow read: if isPaidUser() ||
+        (isAuthenticated() && resource.data.reportedByUid == request.auth.uid);
+
+      // Any authenticated user can log encounters to the global collection, 
+      // but they must mark themselves as the reportedByUid.
+      allow create: if isAuthenticated() && 
+        request.resource.data.reportedByUid == request.auth.uid &&
+        isValidEncounter(request.resource.data);
+      
+      allow update: if isAuthenticated() && 
+        resource.data.reportedByUid == request.auth.uid && 
+        request.resource.data.reportedByUid == request.auth.uid &&
+        isValidEncounter(request.resource.data);
+      
+      allow delete: if isAuthenticated() && 
+        resource.data.reportedByUid == request.auth.uid;
+    }
+  }
+}
